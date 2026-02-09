@@ -1,0 +1,24 @@
+# Environments
+.env
+.venv/
+.nix-profile
+.nix-defexpr
+.direnv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.ruff_cache/
+
+# Data & Database
+data/databases/
+data/transactions/
+# Assuming input data might be large or local-only, but strictness depends on you.
+# keeping 'input/' tracked for now based on your current setup.
+
+# Plugins (Binary jars)
+plugins/*.jar
+
+# IDEs
+
