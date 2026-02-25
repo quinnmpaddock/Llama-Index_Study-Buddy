@@ -20,5 +20,6 @@ data/transactions/
 # Plugins (Binary jars)
 plugins/*.jar
 
-# IDEs
+# extra
+GEMINI.md
 
