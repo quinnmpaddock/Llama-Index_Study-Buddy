@@ -188,9 +188,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         #     result = session.run(query, params)
         #     return [record.data() for record in result]
         records, _, _ = self._driver.execute_query(
-            query,
-            params=params,
-            database_=self.graph_name
+            query, params=params, database_=self.graph_name
         )
         return [record.data() for record in records]
 
@@ -228,26 +226,31 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
 
         # check for existing graph projection
         try:
-            self._run_cypher(f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName")
+            self._run_cypher(
+                f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName"
+            )
             print(f"{self.graph_name} was found open and dropped from memory.")
         except Exception:
             pass
 
         # project the graph to memory
-        self._run_cypher(f"""
+        self._run_cypher(
+            f"""
             MATCH (source:__Node__)
             OPTIONAL MATCH (source)-[r]->(target:__Node__)
             RETURN gds.graph.project(
                 '{self.graph_name}',
                 'source',
                 'target',
-                {},
-                { undirectedRelationshipTypes: ['*']}
+                {{}},
+                {{ undirectedRelationshipTypes: ['*']}}
             )
-        """)
+        """
+        )
 
         # run leiden community detection and write to neo4j
-        self._run_cypher(f"""
+        self._run_cypher(
+            f"""
             CALL gds.leiden.write('{self.graph_name}', {
                 writeProperty: 'community_ids',
                 randomSeed: 19,
@@ -255,12 +258,12 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                 concurrency: 1
             })
             YIELD communityCount
-        """)     
+        """
+        )
 
         # drop graph projection
         self._run_cypher(f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName")
         self._collect_community_info()
-    
 
     # def _collect_community_info(self, nx_graph, clusters):
     #     print("collecting community info")
@@ -290,7 +293,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
     #     return dict(entity_info), dict(community_info)
     def _collect_community_info(self):
         """
-        Collect information for each node based on their community, 
+        Collect information for each node based on their community,
         allowing entities to belong to multiple clusters.
         """
 
@@ -300,8 +303,8 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             UNWIND n.community_ids AS community_id
             MATCH (n)-[r]->(m)
             RETURN
-                community_id,
-                n.name AS node,
+                community_id
+                n.name AS node
                 type(r) as rel_type
                 r.relationship_description AS description
                 coalesce(r.title, 'Unknown Source') AS source
@@ -312,17 +315,16 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         community_info = defaultdict(list)
 
         for row in results:
-            cluster_id = row['community_id']
-            node = row['node']
-            entity_info[node].add(cluster_id)
-            
+            cluster_id = row["community_id"]
+            node = row["node"]
+            entity_info[node].append(cluster_id)
+
             detail = f"{node} -> {row['neighbor']} -> {row['rel_type']} -> {row['description']} [Source: {row['source']}]"
             community_info[cluster_id].append(detail)
 
         # converts entity_info sets into lists for easier serialization (CURRENTLY UNNECESSARY)
         self.entity_info = {k: list(v) for k, v in entity_info.items()}
         self._summarize_communities(community_info)
-        
 
     def _summarize_communities(self, community_info):
         print("summarize communities")
