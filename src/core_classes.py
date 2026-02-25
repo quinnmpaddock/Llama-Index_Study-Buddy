@@ -150,7 +150,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
     community_summary = {}
     entity_info = None
     max_cluster_size = 5
-    graph_name = "neo4j-apoc"
+    graph_name = "neo4j"
     print("Start of GraphRAGStore")
 
     def generate_community_summary(self, text):
@@ -240,8 +240,8 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             OPTIONAL MATCH (source)-[r]->(target:__Node__)
             RETURN gds.graph.project(
                 '{self.graph_name}',
-                'source',
-                'target',
+                source,
+                target,
                 {{}},
                 {{ undirectedRelationshipTypes: ['*']}}
             )
