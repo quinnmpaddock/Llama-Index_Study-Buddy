@@ -54,8 +54,8 @@
           linuxDisplayLibs = with pkgs; [
             libGL
             libxkbcommon
-            xorg.libX11
-            xorg.libxcb
+            libX11
+            libxcb
             glib
             fontconfig
             stdenv.cc.cc.lib
