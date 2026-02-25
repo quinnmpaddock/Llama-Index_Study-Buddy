@@ -251,12 +251,12 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         # run leiden community detection and write to neo4j
         self._run_cypher(
             f"""
-            CALL gds.leiden.write('{self.graph_name}', {
+            CALL gds.leiden.write('{self.graph_name}', {{
                 writeProperty: 'community_ids',
                 randomSeed: 19,
                 includeIntermediateCommunities: true,
                 concurrency: 1
-            })
+            }})
             YIELD communityCount
         """
         )
@@ -303,11 +303,11 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             UNWIND n.community_ids AS community_id
             MATCH (n)-[r]->(m)
             RETURN
-                community_id
-                n.name AS node
-                type(r) as rel_type
-                r.relationship_description AS description
-                coalesce(r.title, 'Unknown Source') AS source
+                community_id,
+                n.name AS node,
+                type(r) as rel_type,
+                r.relationship_description AS description,
+                coalesce(r.title, 'Unknown Source') AS source,
                 m.name as neighbor 
         """
         results = self._run_cypher(query)
