@@ -20,13 +20,7 @@ from llama_index.core.graph_stores.types import (KG_NODES_KEY,
                                                  Relation)
 from llama_index.core.indices.property_graph.utils import \
     default_parse_triplets_fn
-from llama_index.core.llms import LLM, ChatMessage
-# from llama_index.core.llms.llm import LLM
-from llama_index.core.prompts import PromptTemplate
-from llama_index.core.prompts.default_prompts import \
-    DEFAULT_KG_TRIPLET_EXTRACT_PROMPT
 from llama_index.core.query_engine import CustomQueryEngine
-from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
 from llama_index.llms.groq import Groq
 
@@ -178,12 +172,12 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         print("TEST: constructed")
         return clean_response
 
-    def _run_cypher(self, query: str, params: dict = None):
+    def _run_cypher(self, query: str, params: Dict[str, Any] | None = None):
         """Sends cypher commands to the neo4j database"""
         if params is None:
             params = {}
         records, _, _ = self._driver.execute_query(
-            query, params=params, database_=self.graph_name
+            query, parameters_=params, database_=self.graph_name
         )
         return [record.data() for record in records]
 
@@ -191,44 +185,46 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         """Builds communities from the graph and persists them to the neo4j database"""
 
         # check for existing graph projection
+        # try:
+        #     self._run_cypher(
+        #         f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName"
+        #     )
+        #     print(f"{self.graph_name} was found open and dropped from memory.")
+        # except Exception:
+        #     pass
         try:
+            # project the graph to memory
             self._run_cypher(
-                f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName"
+                f"""
+                MATCH (source:__Node__)
+                OPTIONAL MATCH (source)-[r]->(target:__Node__)
+                RETURN gds.graph.project(
+                    '{self.graph_name}',
+                    source,
+                    target,
+                    {{}},
+                    {{ undirectedRelationshipTypes: ['*']}}
+                )
+            """
             )
-            print(f"{self.graph_name} was found open and dropped from memory.")
-        except Exception:
-            pass
 
-        # project the graph to memory
-        self._run_cypher(
-            f"""
-            MATCH (source:__Node__)
-            OPTIONAL MATCH (source)-[r]->(target:__Node__)
-            RETURN gds.graph.project(
-                '{self.graph_name}',
-                source,
-                target,
-                {{}},
-                {{ undirectedRelationshipTypes: ['*']}}
+            # run leiden community detection and write to neo4j
+            self._run_cypher(
+                f"""
+                CALL gds.leiden.write('{self.graph_name}', {{
+                    writeProperty: 'community_ids',
+                    randomSeed: 19,
+                    includeIntermediateCommunities: true,
+                    concurrency: 1
+                }})
+                YIELD communityCount
+            """
             )
-        """
-        )
-
-        # run leiden community detection and write to neo4j
-        self._run_cypher(
-            f"""
-            CALL gds.leiden.write('{self.graph_name}', {{
-                writeProperty: 'community_ids',
-                randomSeed: 19,
-                includeIntermediateCommunities: true,
-                concurrency: 1
-            }})
-            YIELD communityCount
-        """
-        )
-
-        # drop graph projection
-        self._run_cypher(f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName")
+        finally:
+            # drop graph projection
+            self._run_cypher(
+                f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
+            )
         self._collect_community_info()
 
     def _collect_community_info(self):
@@ -241,7 +237,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             MATCH (n)
             WHERE n.community_ids IS NOT NULL
             UNWIND n.community_ids AS community_id
-            MATCH (n)-[r]->(m)
+            OPTIONAL MATCH (n)-[r]-(m)
             RETURN
                 community_id,
                 n.name AS node,
@@ -258,9 +254,9 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             cluster_id = row["community_id"]
             node = row["node"]
             entity_info[node].append(cluster_id)
-
-            detail = f"{node} -> {row['neighbor']} -> {row['rel_type']} -> {row['description']} [Source: {row['source']}]"
-            community_info[cluster_id].append(detail)
+            if row["neighbor"] is not None and row["rel_type"] is not None:
+                detail = f"{node} -> {row['neighbor']} -> {row['rel_type']} -> {row['description']} [Source: {row['source']}]"
+                community_info[cluster_id].append(detail)
 
         # converts entity_info sets into lists for easier serialization (CURRENTLY UNNECESSARY)
         self.entity_info = {k: list(v) for k, v in entity_info.items()}
