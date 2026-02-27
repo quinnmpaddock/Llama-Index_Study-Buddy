@@ -2,14 +2,15 @@ import asyncio
 import re
 
 import nest_asyncio
-import networkx as nx
+
+# import networkx as nx
 
 nest_asyncio.apply()
 
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from graspologic.partition import hierarchical_leiden
+# from graspologic.partition import hierarchical_leiden
 from IPython.display import Markdown, display
 from llama_index.core import PropertyGraphIndex
 from llama_index.core.async_utils import run_jobs
@@ -149,6 +150,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
     community_summary = {}
     entity_info = None
     max_cluster_size = 5
+    graph_name = "neo4j"
     print("Start of GraphRAGStore")
 
     def generate_community_summary(self, text):
@@ -169,70 +171,100 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             ),
             ChatMessage(role="user", content=text),
         ]
-        # print("TEST: constructed chat message!")
         llm = Groq(model="meta-llama/llama-4-scout-17b-16e-instruct")
-        # print("TEST: specifying llm")
         response = llm.chat(messages)
 
         clean_response = re.sub(r"^assistant:\s*", "", str(response)).strip()
         print("TEST: constructed")
         return clean_response
 
+    def _run_cypher(self, query: str, params: dict = None):
+        """Sends cypher commands to the neo4j database"""
+        if params is None:
+            params = {}
+        records, _, _ = self._driver.execute_query(
+            query, params=params, database_=self.graph_name
+        )
+        return [record.data() for record in records]
+
     def build_communities(self):
-        print("Building communities")
-        """Builds communities from the graph and summarizes them."""
-        nx_graph = self._create_nx_graph()
-        community_hierarchical_clusters = hierarchical_leiden(
-            nx_graph, max_cluster_size=self.max_cluster_size
-        )
-        self.entity_info, community_info = self._collect_community_info(
-            nx_graph, community_hierarchical_clusters
-        )
-        self._summarize_communities(community_info)
+        """Builds communities from the graph and persists them to the neo4j database"""
 
-    def _create_nx_graph(self):
-        print("creating nx graph")
-        """Converts internal graph representation to NetworkX graph."""
-        nx_graph = nx.Graph()
-        triplets = self.get_triplets()
-        for entity1, relation, entity2 in triplets:
-            nx_graph.add_node(entity1.name)
-            nx_graph.add_node(entity2.name)
-            nx_graph.add_edge(
-                relation.source_id,
-                relation.target_id,
-                relationship=relation.label,
-                description=relation.properties["relationship_description"],
-                source=relation.properties.get("title", "Unknown Source"),
+        # check for existing graph projection
+        try:
+            self._run_cypher(
+                f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName"
             )
-        return nx_graph
+            print(f"{self.graph_name} was found open and dropped from memory.")
+        except Exception:
+            pass
 
-    def _collect_community_info(self, nx_graph, clusters):
-        print("collecting community info")
+        # project the graph to memory
+        self._run_cypher(
+            f"""
+            MATCH (source:__Node__)
+            OPTIONAL MATCH (source)-[r]->(target:__Node__)
+            RETURN gds.graph.project(
+                '{self.graph_name}',
+                source,
+                target,
+                {{}},
+                {{ undirectedRelationshipTypes: ['*']}}
+            )
+        """
+        )
+
+        # run leiden community detection and write to neo4j
+        self._run_cypher(
+            f"""
+            CALL gds.leiden.write('{self.graph_name}', {{
+                writeProperty: 'community_ids',
+                randomSeed: 19,
+                includeIntermediateCommunities: true,
+                concurrency: 1
+            }})
+            YIELD communityCount
+        """
+        )
+
+        # drop graph projection
+        self._run_cypher(f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName")
+        self._collect_community_info()
+
+    def _collect_community_info(self):
         """
         Collect information for each node based on their community,
         allowing entities to belong to multiple clusters.
         """
-        entity_info = defaultdict(set)
+
+        query = """
+            MATCH (n)
+            WHERE n.community_ids IS NOT NULL
+            UNWIND n.community_ids AS community_id
+            MATCH (n)-[r]->(m)
+            RETURN
+                community_id,
+                n.name AS node,
+                type(r) as rel_type,
+                r.relationship_description AS description,
+                coalesce(r.title, 'Unknown Source') AS source,
+                m.name as neighbor 
+        """
+        results = self._run_cypher(query)
+        entity_info = defaultdict(list)
         community_info = defaultdict(list)
 
-        for item in clusters:
-            node = item.node
-            cluster_id = item.cluster
+        for row in results:
+            cluster_id = row["community_id"]
+            node = row["node"]
+            entity_info[node].append(cluster_id)
 
-            # Update entity_info
-            entity_info[node].add(cluster_id)
+            detail = f"{node} -> {row['neighbor']} -> {row['rel_type']} -> {row['description']} [Source: {row['source']}]"
+            community_info[cluster_id].append(detail)
 
-            for neighbor in nx_graph.neighbors(node):
-                edge_data = nx_graph.get_edge_data(node, neighbor)
-                if edge_data:
-                    detail = f"{node} -> {neighbor} -> {edge_data['relationship']} -> {edge_data['description']} [Source: {edge_data['source']}]"
-                    community_info[cluster_id].append(detail)
-
-        # Convert sets to lists for easier serialization if needed
-        entity_info = {k: list(v) for k, v in entity_info.items()}
-
-        return dict(entity_info), dict(community_info)
+        # converts entity_info sets into lists for easier serialization (CURRENTLY UNNECESSARY)
+        self.entity_info = {k: list(v) for k, v in entity_info.items()}
+        self._summarize_communities(community_info)
 
     def _summarize_communities(self, community_info):
         print("summarize communities")

@@ -9,13 +9,7 @@ Study Buddy is a Retrieval-Augmented Generation (RAG) system that leverages Know
 - **Advanced Querying**: Uses community summaries to answer complex queries that require a high-level understanding of the dataset.
 
 ## Tech Stack
-
 - **Orchestration**: LlamaIndex
 - **Database**: Neo4j
 - **LLM**: Groq (Llama-3)
 - **Embeddings**: HuggingFace (KaLM-Embedding)
-
-## Current Plans
-
-- **Implement PageRank algorithm for node/edge weights**
-- **Custom UI**
