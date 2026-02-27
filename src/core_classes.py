@@ -223,7 +223,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         finally:
             # drop graph projection
             self._run_cypher(
-                f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName"
+                f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
             )
         self._collect_community_info()
 
