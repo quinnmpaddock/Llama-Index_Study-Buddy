@@ -18,16 +18,12 @@ from llama_index.core.bridge.pydantic import BaseModel, Field
 from llama_index.core.graph_stores.types import (KG_NODES_KEY,
                                                  KG_RELATIONS_KEY, EntityNode,
                                                  Relation)
-
-from llama_index.core.indices.property_graph.utilKG_NODES_KEY,
-                                                 KG_RELATIONS_KEY, EntityNode,
-                                                 Relation)
+from llama_index.core.indices.property_graph.utils import \
+    default_parse_triplets_fn
 from llama_index.core.query_engine import CustomQueryEngine
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
 from llama_index.llms.groq import Groq
 
-\
-    
 
 class GraphRAGExtractor(TransformComponent):
     """Extract triples from a graph.
@@ -176,7 +172,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         print("TEST: constructed")
         return clean_response
 
-    def _run_cypher(self, query: str, params: Dict[str, Any] | None = none):
+    def _run_cypher(self, query: str, params: Dict[str, Any] | None = None):
         """Sends cypher commands to the neo4j database"""
         if params is None:
             params = {}
@@ -226,8 +222,10 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             )
         finally:
             # drop graph projection
-            self._run_cypher(f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName")
-            self._collect_community_info()
+            self._run_cypher(
+                f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName"
+            )
+        self._collect_community_info()
 
     def _collect_community_info(self):
         """
@@ -256,7 +254,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             cluster_id = row["community_id"]
             node = row["node"]
             entity_info[node].append(cluster_id)
-            if row["neighbor"] is not None and row["rel_type"] is not None: 
+            if row["neighbor"] is not None and row["rel_type"] is not None:
                 detail = f"{node} -> {row['neighbor']} -> {row['rel_type']} -> {row['description']} [Source: {row['source']}]"
                 community_info[cluster_id].append(detail)
 
