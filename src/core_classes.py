@@ -20,7 +20,12 @@ from llama_index.core.graph_stores.types import (KG_NODES_KEY,
                                                  Relation)
 from llama_index.core.indices.property_graph.utils import \
     default_parse_triplets_fn
+from llama_index.core.llms import LLM, ChatMessage
+from llama_index.core.prompts import PromptTemplate
+from llama_index.core.prompts.default_prompts import \
+    DEFAULT_KG_TRIPLET_EXTRACT_PROMPT
 from llama_index.core.query_engine import CustomQueryEngine
+from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
 from llama_index.llms.groq import Groq
 
