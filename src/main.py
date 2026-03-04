@@ -125,20 +125,20 @@ def main():
         property_graph_store=graph_store,
         show_progress=True,
     )
-    print("Setting up query engine")
+
     index.property_graph_store.build_communities()
 
-    query_engine = GraphRAGQueryEngine(
-        graph_store=index.property_graph_store,
-        llm=llm,
-        index=index,
-        similarity_top_k=10,
-    )
+    # query_engine = GraphRAGQueryEngine(
+    #     graph_store=index.property_graph_store,
+    #     llm=llm,
+    #     index=index,
+    #     similarity_top_k=10,
+    # )
 
-    response = query_engine.query("What are the main news discussed in the document?")
+    # response = query_engine.query("What are the main news discussed in the document?")
 
-    print("Displaying response ...")
-    print(response.response)
+    # print("Displaying response ...")
+    # print(response.response)
 
 
 if __name__ == "__main__":

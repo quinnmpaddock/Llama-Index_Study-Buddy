@@ -1,0 +1,66 @@
+# Project: Study Buddy (GraphRAG)
+
+## Overview
+This project implements a **GraphRAG (Retrieval-Augmented Generation)** system using **LlamaIndex** and **Neo4j**. It extracts entities and relationships from unstructured text (news articles) to build a Knowledge Graph, detects communities within the graph using the Leiden algorithm, and uses these community summaries to answer user queries.
+
+## Architecture & Key Components
+
+### Core Technologies
+*   **Language:** Python 3.12
+*   **Orchestration:** LlamaIndex
+*   **Graph Database:** Neo4j
+*   **LLM:** Groq (`meta-llama/llama-4-scout-17b-16e-instruct`)
+*   **Embeddings:** HuggingFace (`KaLM-Embedding`)
+*   **Community Detection:** Graspologic (`hierarchical_leiden`) & NetworkX
+*   **Environment Management:** Nix (Flakes)
+
+### File Structure
+*   **`src/main.py`**: The main entry point. Orchestrates the pipeline: loads data, extracts triplets, builds the graph, runs community detection, and executes a sample query.
+*   **`src/core_classes.py`**: Contains the custom logic:
+    *   `GraphRAGExtractor`: Extracts entities/relationships from text using an LLM prompt.
+    *   `GraphRAGStore`: Extends `Neo4jPropertyGraphStore` to handle community detection and summarization.
+    *   `GraphRAGQueryEngine`: Custom query engine that answers questions based on community summaries of retrieved entities.
+*   **`src/prompts/kg_extract_template.txt`**: The prompt template used to instruct the LLM to extract JSON-formatted knowledge triplets.
+*   **`input/csv/news_articles.csv`**: Source data for the knowledge graph.
+*   **`flake.nix`**: Defines the reproducible development environment.
+
+## Setup & Usage
+
+### Prerequisites
+1.  **Nix**: Ensure Nix is installed with flakes enabled.
+2.  **Neo4j**: A local Neo4j instance must be running.
+    *   **URL**: `bolt://localhost:7687`
+    *   **User**: `neo4j`
+    *   **Password**: `Drewert237?` (Currently hardcoded in `src/main.py`)
+3.  **Groq API Key**: Must be set in the environment (e.g., via `.env`).
+
+### Running the Project
+1.  **Enter the Environment**:
+    ```bash
+    nix develop
+    ```
+    *This will set up Python 3.12 and install all dependencies defined in `flake.nix` and `requirements.txt`.*
+
+2.  **Run the Pipeline**:
+    ```bash
+    python src/main.py
+    ```
+    *This command will:*
+    1.  Read `news_articles.csv`.
+    2.  Chunk the text.
+    3.  Extract entities and relationships (using Groq).
+    4.  Populate the Neo4j database.
+    5.  Build and summarize communities.
+    6.  Run a sample query: "What are the main news discussed in the document?"
+
+## Development Conventions
+
+*   **Code Style**: Python code follows standard PEP 8 conventions.
+*   **Type Hinting**: Extensive use of Python type hints (`typing` module).
+*   **Async/Await**: The extraction pipeline utilizes `asyncio` for parallel processing.
+*   **Hardcoded Secrets**: *Warning:* Database credentials are currently hardcoded in `src/main.py`. Ideally, these should be moved to environment variables.
+*   **LlamaIndex Customization**: The project heavily relies on subclassing LlamaIndex components (`TransformComponent`, `Neo4jPropertyGraphStore`, `CustomQueryEngine`) to inject custom GraphRAG logic.
+
+## Current Status
+*   **`src/app.py`**: Currently empty. Reserved for a future web interface or API.
+*   **Data Ingestion**: Currently limited to `input/csv/news_articles.csv` (hardcoded path).
