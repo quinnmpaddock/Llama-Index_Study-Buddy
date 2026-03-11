@@ -128,7 +128,7 @@ def main():
 
     index.property_graph_store.build_communities()
     # save community summaries to json
-    output_dir = os.path.join(BASE_DIR, "..", "data")
+    output_dir = os.path.join(BASE_DIR, "..", "summaries")
     os.makedirs(output_dir, exist_ok=True)
     summary_path = os.path.join(output_dir, "community_summaries.json")
 
