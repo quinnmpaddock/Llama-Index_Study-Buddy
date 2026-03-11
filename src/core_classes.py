@@ -224,7 +224,9 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                 Call gds.graph.project(
                     '{self.graph_name}',
                     '*',
-                    {{`*`: {{orientation: 'UNDIRECTED'}}}}
+                    {{
+                        '*': {{orientation: 'UNDIRECTED'}}
+                    }}
                 )
             """
             )
