@@ -127,7 +127,21 @@ def main():
     )
 
     index.property_graph_store.build_communities()
+    # save community summaries to json
+    output_dir = os.path.join(BASE_DIR, "..", "data")
+    os.makedirs(output_dir, exist_ok=True)
+    summary_path = os.path.join(output_dir, "community_summaries.json")
 
+    if os.path.exists(summary_path):
+        if (
+            input(f"'{summary_path}' already exists. Overwrite? (y/n):").strip().lower()
+            != "y"
+        ):
+            print("Operation cancelled.")
+            return
+    with open(summary_path, "w", encoding="utf-8") as f:
+        json.dump(index.property_graph_store.community_summary, f, indent=4)
+    print(f"Community summaries saved to {summary_path}")
     # query_engine = GraphRAGQueryEngine(
     #     graph_store=index.property_graph_store,
     #     llm=llm,
