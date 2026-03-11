@@ -221,12 +221,14 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             # project the graph to memory
             self._run_cypher(
                 f"""
-                Call gds.graph.project(
+                MATCH (source)-[r]->(target)
+                Return gds.graph.project(
                     '{self.graph_name}',
-                    '*',
-                    {{
-                        '*': {{orientation: 'UNDIRECTED'}}
-                    }}
+                    source,
+                    target,
+                    {{}},
+                    {{ undirectedRelationshipTypes: ['*']}}
+
                 )
             """
             )
