@@ -12,7 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 # from graspologic.partition import hierarchical_leiden
 from IPython.display import Markdown, display
-from llama_index.core import PropertyGraphIndex
+from llama_index.core import PropertyGraphIndex, Settings
 from llama_index.core.async_utils import run_jobs
 from llama_index.core.bridge.pydantic import BaseModel, Field
 from llama_index.core.graph_stores.types import (KG_NODES_KEY,
@@ -63,7 +63,7 @@ class GraphRAGExtractor(TransformComponent):
         num_workers: int = 4,
     ) -> None:
         """Init params."""
-        from llama_index.core import Settings
+        # from llama_index.core import Settings
 
         if isinstance(extract_prompt, str):
             extract_prompt = PromptTemplate(extract_prompt)
@@ -146,11 +146,32 @@ class GraphRAGExtractor(TransformComponent):
 
 
 class GraphRAGStore(Neo4jPropertyGraphStore):
-    community_summary = {}
-    entity_info = None
-    max_cluster_size = 5
-    graph_name = "neo4j"
-    print("Start of GraphRAGStore")
+    # community_summary = {}
+    # entity_info = None
+    # max_cluster_size = 5
+    # graph_name = "neo4j"
+    def __init__(
+        self,
+        username: Optional[str] = "neo4j",
+        password: Optional[str] = None,
+        url: Optional[str] = "bolt://localhost:7867",
+        database: Optional[str] = "neo4j",
+        llm: Optional[LLM] = None,
+        entity_info: Optional[Dict[str, Any]] = None,
+        community_summary: Optional[Dict[str, Any]] = None,
+    ) -> None:
+
+        super().__init__(
+            username=username,
+            password=password,
+            url=url,
+            database=database,
+        )
+
+        self.llm = llm or Settings.llm
+        self.graph_name = database
+        self.entity_info = entity_info or {}
+        self.community_summary = community_summary or {}
 
     def generate_community_summary(self, text):
         """Generate summary for a given text using an LLM."""
@@ -170,8 +191,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             ),
             ChatMessage(role="user", content=text),
         ]
-        llm = Groq(model="meta-llama/llama-4-scout-17b-16e-instruct")
-        response = llm.chat(messages)
+        response = self.llm.chat(messages)
 
         clean_response = re.sub(r"^assistant:\s*", "", str(response)).strip()
         print("TEST: constructed")
@@ -201,14 +221,14 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             # project the graph to memory
             self._run_cypher(
                 f"""
-                MATCH (source:__Node__)
-                OPTIONAL MATCH (source)-[r]->(target:__Node__)
-                RETURN gds.graph.project(
+                MATCH (source)-[r]->(target)
+                Return gds.graph.project(
                     '{self.graph_name}',
                     source,
                     target,
                     {{}},
                     {{ undirectedRelationshipTypes: ['*']}}
+
                 )
             """
             )
@@ -288,7 +308,7 @@ class GraphRAGQueryEngine(CustomQueryEngine):
     graph_store: GraphRAGStore
     index: PropertyGraphIndex
     llm: LLM
-    similarity_top_k: int = 20
+    similarity_top_k: int = 20  # possible validation error here, come back
 
     def custom_query(self, query_str: str) -> str:
         """Process all community summaries to generate answers to a specific query."""
@@ -316,8 +336,9 @@ class GraphRAGQueryEngine(CustomQueryEngine):
         enitites = set()
         pattern = r"^(\w+(?:\s+\w+)*)\s*->\s*([a-zA-Z\s]+?)\s*->\s*(\w+(?:\s+\w+)*)$"
 
-        for node in nodes_retrieved:
-            matches = re.findall(pattern, node.text, re.MULTILINE | re.IGNORECASE)
+        for node_with_score in nodes_retrieved:
+            text = node_with_score.node.get_content()
+            matches = re.findall(pattern, text, re.MULTILINE | re.IGNORECASE)
 
             for match in matches:
                 subject = match[0]

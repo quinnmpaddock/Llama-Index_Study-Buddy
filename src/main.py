@@ -125,20 +125,34 @@ def main():
         property_graph_store=graph_store,
         show_progress=True,
     )
-    print("Setting up query engine")
+
     index.property_graph_store.build_communities()
+    # save community summaries to json
+    output_dir = os.path.join(BASE_DIR, "..", "summaries")
+    os.makedirs(output_dir, exist_ok=True)
+    summary_path = os.path.join(output_dir, "community_summaries.json")
 
-    query_engine = GraphRAGQueryEngine(
-        graph_store=index.property_graph_store,
-        llm=llm,
-        index=index,
-        similarity_top_k=10,
-    )
+    if os.path.exists(summary_path):
+        if (
+            input(f"'{summary_path}' already exists. Overwrite? (y/n):").strip().lower()
+            != "y"
+        ):
+            print("Operation cancelled.")
+            return
+    with open(summary_path, "w", encoding="utf-8") as f:
+        json.dump(index.property_graph_store.community_summary, f, indent=4)
+    print(f"Community summaries saved to {summary_path}")
+    # query_engine = GraphRAGQueryEngine(
+    #     graph_store=index.property_graph_store,
+    #     llm=llm,
+    #     index=index,
+    #     similarity_top_k=10,
+    # )
 
-    response = query_engine.query("What are the main news discussed in the document?")
+    # response = query_engine.query("What are the main news discussed in the document?")
 
-    print("Displaying response ...")
-    print(response.response)
+    # print("Displaying response ...")
+    # print(response.response)
 
 
 if __name__ == "__main__":
