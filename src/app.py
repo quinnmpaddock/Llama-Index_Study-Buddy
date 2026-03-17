@@ -123,7 +123,7 @@ async def query_graph(request: QueryRequest):
         response = await app.state.engine.acustom_query(request.query)
         return {
             "answer": response.response,
-            "communities_detected": response.metadata.get("communities_consulted", []),
+            "communities_consulted": response.metadata.get("communities_consulted", []),
             "entities_found": response.metadata.get("entities_found", []),
         }
     except Exception as e:
