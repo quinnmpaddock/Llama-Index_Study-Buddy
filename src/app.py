@@ -23,6 +23,7 @@ NEO4JPASSWORD = "Drewert237?"
 NEO4J_URL = "bolt://localhost:7687"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUMMARIES_PATH = os.path.join(BASE_DIR, "..", "summaries", "community_summaries.json")
+ENTITY_INFO_PATH = os.path.join(BASE_DIR, "..", "summaries", "entity_info.json")
 
 
 # --- API Models ---
@@ -61,6 +62,18 @@ async def lifespan(app: FastAPI):
         community_summaries = {int(k): v for k, v in raw_summaries.items()}
         logger.info(f"Loaded {len(community_summaries)} community summaries.")
 
+        if not os.path.exists(ENTITY_INFO_PATH):
+            logger.error(
+                f"Entity info file not found at {ENTITY_INFO_PATH}. Please run main.py first."
+            )
+            raise FileNotFoundError(f"Missing {ENTITY_INFO_PATH}")
+
+        with open(ENTITY_INFO_PATH, "r", encoding="utf-8") as f:
+            raw_summaries = json.load(f)
+
+        community_summaries = {int(k): v for k, v in raw_summaries.items()}
+        logger.info(f"Loaded {len(community_summaries)} entity mappings.")
+
         # 3. Initialize Store and Index
         # We pass the loaded summaries directly to the store
         graph_store = GraphRAGStore(
@@ -68,6 +81,7 @@ async def lifespan(app: FastAPI):
             password=NEO4JPASSWORD,
             url=NEO4J_URL,
             community_summary=community_summaries,
+            entity_info=entity_info,
         )
 
         # Initialize PropertyGraphIndex from the existing store

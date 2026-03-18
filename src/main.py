@@ -131,6 +131,7 @@ def main():
     output_dir = os.path.join(BASE_DIR, "..", "summaries")
     os.makedirs(output_dir, exist_ok=True)
     summary_path = os.path.join(output_dir, "community_summaries.json")
+    entity_info_path = os.path.join(output_dir, "entity_info.json")
 
     if os.path.exists(summary_path):
         if (
@@ -153,6 +154,10 @@ def main():
 
     # print("Displaying response ...")
     # print(response.response)
+
+    with open(entity_info_path, "w", encoding="utf-8") as f:
+        json.dump(index.property_graph_store.entity_info, f, indent=4)
+    print(f"Entity info mapping saved to {entity_info_path}")
 
 
 if __name__ == "__main__":
