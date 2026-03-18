@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
 
         with open(ENTITY_INFO_PATH, "r", encoding="utf-8") as f:
             entity_info = json.load(f)
-        logger.info(f"Loaded {len(community_summaries)} entity mappings.")
+        logger.info(f"Loaded {len(entity_info)} entity mappings.")
 
         # 3. Initialize Store and Index
         # We pass the loaded summaries directly to the store
