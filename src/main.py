@@ -155,6 +155,13 @@ def main():
     # print("Displaying response ...")
     # print(response.response)
 
+    if os.path.exists(entity_info_path):
+        if (
+            input(f"'{entity_info_path}' already exists. Overwrite? (y/n):").strip().lower()
+            != "y"
+        ):
+            print("Operation cancelled.")
+            return
     with open(entity_info_path, "w", encoding="utf-8") as f:
         json.dump(index.property_graph_store.entity_info, f, indent=4)
     print(f"Entity info mapping saved to {entity_info_path}")
