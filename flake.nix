@@ -81,7 +81,12 @@
 
             buildInputs = pkgs.lib.optionals pkgs.stdenv.isLinux linuxDisplayLibs;
 
+            # Ensure libraries are available to dynamically linked binaries (like torch)
+            LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (pkgs.lib.optionals pkgs.stdenv.isLinux linuxDisplayLibs);
+
             postShellHook = ''
+              export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath linuxDisplayLibs}:$LD_LIBRARY_PATH"
+
               venvVersionWarn() {
               	local venvVersion
               	venvVersion="$("$venvDir/bin/python" -c 'import platform; print(platform.python_version())')"

@@ -1,12 +1,5 @@
 import asyncio
 import re
-
-import nest_asyncio
-
-# import networkx as nx
-
-nest_asyncio.apply()
-
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -14,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from IPython.display import Markdown, display
 from llama_index.core import PropertyGraphIndex, Settings
 from llama_index.core.async_utils import run_jobs
+from llama_index.core.base.response.schema import Response
 from llama_index.core.bridge.pydantic import BaseModel, Field
 from llama_index.core.graph_stores.types import (KG_NODES_KEY,
                                                  KG_RELATIONS_KEY, EntityNode,
@@ -28,6 +22,16 @@ from llama_index.core.query_engine import CustomQueryEngine
 from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
 from llama_index.llms.groq import Groq
+
+# import networkx as nx
+
+
+class GraphQueryResponse(BaseModel):
+    """to enforce structured metadata returns"""
+
+    answer: str
+    communities_consulted: List[Union[str, int]]
+    entities_found: List[str]
 
 
 class GraphRAGExtractor(TransformComponent):
@@ -328,6 +332,31 @@ class GraphRAGQueryEngine(CustomQueryEngine):
         final_answer = self.aggregate_answers(community_answers)
         return final_answer
 
+    async def acustom_query(self, query_str: str) -> Response:
+        """Process all community summaries to generate answers to a specific query."""
+
+        entities = self.get_entities(query_str, self.similarity_top_k)
+
+        community_summaries = self.graph_store.get_community_summaries()
+        community_ids = self.retrieve_entity_communities(
+            self.graph_store.entity_info, entities
+        )
+        tasks = [
+            self.agenerate_answer_from_summary(community_summary, query_str)
+            for id, community_summary in community_summaries.items()
+            if id in community_ids
+        ]
+
+        community_answers = await asyncio.gather(*tasks)
+        final_answer = await self.aaggregate_answers(community_answers)
+        return Response(
+            response=final_answer,
+            metadata={
+                "communities_consulted": community_ids,
+                "entities_found": entities,
+            },
+        )
+
     def get_entities(self, query_str, similarity_top_k):
         nodes_retrieved = self.index.as_retriever(
             similarity_top_k=similarity_top_k
@@ -384,6 +413,24 @@ class GraphRAGQueryEngine(CustomQueryEngine):
         cleaned_response = re.sub(r"^assistant:\s*", "", str(response)).strip()
         return cleaned_response
 
+    async def agenerate_answer_from_summary(self, community_summary, query):
+        """async version of generate_answer_from_summary"""
+
+        prompt = (
+            f"Given the community summary: {community_summary}, "
+            f"how would you answer the following query? Query: {query}"
+        )
+        messages = [
+            ChatMessage(role="system", content=prompt),
+            ChatMessage(
+                role="user",
+                content="I need an answer based on the above information.",
+            ),
+        ]
+        response = await self.llm.achat(messages)
+        cleaned_response = re.sub(r"^assistant:\s*", "", str(response)).strip()
+        return cleaned_response
+
     def aggregate_answers(self, community_answers):
         """Aggregate individual community answers into a final, coherent response."""
         # intermediate_text = " ".join(community_answers)
@@ -404,3 +451,28 @@ class GraphRAGQueryEngine(CustomQueryEngine):
             r"^assistant:\s*", "", str(final_response)
         ).strip()
         return cleaned_final_response
+
+    async def aaggregate_answers(self, community_answers):
+        """Aggregate individual community answers into a final, coherent response."""
+        # intermediate_text = " ".join(community_answers)
+        prompt = (
+            "Combine the following intermediate answers into a final, concise response."
+            "Ensure that all source citations provided in the intermediate answers are"
+            "preserved in the final output"
+        )
+        messages = [
+            ChatMessage(role="system", content=prompt),
+            ChatMessage(
+                role="user",
+                content=f"Intermediate answers: {community_answers}",
+            ),
+        ]
+        final_response = await self.llm.achat(messages)
+        cleaned_final_response = re.sub(
+            r"^assistant:\s*", "", str(final_response)
+        ).strip()
+        return cleaned_final_response
+
+
+# Future todo: add GraphRAGSettings classes from pydantic BaseSettings to
+# organize env vars
