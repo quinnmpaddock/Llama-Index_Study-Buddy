@@ -69,7 +69,7 @@ async def lifespan(app: FastAPI):
             raise FileNotFoundError(f"Missing {ENTITY_INFO_PATH}")
 
         with open(ENTITY_INFO_PATH, "r", encoding="utf-8") as f:
-            raw_summaries = json.load(f)
+            entity_info = json.load(f)
         logger.info(f"Loaded {len(community_summaries)} entity mappings.")
 
         # 3. Initialize Store and Index
