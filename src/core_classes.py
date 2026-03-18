@@ -30,7 +30,7 @@ class GraphQueryResponse(BaseModel):
     """to enforce structured metadata returns"""
 
     answer: str
-    communities_consulted: List[str]
+    communities_consulted: List[Union[str, int]]
     entities_found: List[str]
 
 
