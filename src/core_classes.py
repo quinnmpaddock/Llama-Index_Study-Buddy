@@ -187,7 +187,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                     "You are provided with a set of relationships from a knowledge graph, each represented as "
                     "entity1->entity2->relation->relationship_description. Your task is to create a summary of these "
                     "relationships. The summary should include the names of the entities involved and a concise synthesis of the relationship descriptions."
-                    "You must cite the source (provided in brackets) for every key fact or group of facts mentioned"
+                    "You must cite the source (provided in brackets) for every key fact or group of facts mentioned."
                     "The goal is to capture the most critical and relevant details that "
                     "highlight the nature and significance of each relationship. Ensure that the summary is coherent and "
                     "integrates the information in a way that emphasizes the key aspects of the relationships."

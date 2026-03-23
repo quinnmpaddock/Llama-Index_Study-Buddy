@@ -13,7 +13,7 @@ from llama_index.llms.groq import Groq
 
 from core_classes import GraphRAGExtractor, GraphRAGQueryEngine, GraphRAGStore
 
-NEO4JPASSWORD = "Drewert237?"
+NEO4JPASSWORD = "neo4j2026"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 print("Setup local embedding model ...")
@@ -157,7 +157,9 @@ def main():
 
     if os.path.exists(entity_info_path):
         if (
-            input(f"'{entity_info_path}' already exists. Overwrite? (y/n):").strip().lower()
+            input(f"'{entity_info_path}' already exists. Overwrite? (y/n):")
+            .strip()
+            .lower()
             != "y"
         ):
             print("Operation cancelled.")

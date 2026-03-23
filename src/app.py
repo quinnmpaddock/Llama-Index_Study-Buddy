@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Constants (mirroring main.py)
-NEO4JPASSWORD = "Drewert237?"
+NEO4JPASSWORD = "neo4j2026"
 NEO4J_URL = "bolt://localhost:7687"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUMMARIES_PATH = os.path.join(BASE_DIR, "..", "summaries", "community_summaries.json")
