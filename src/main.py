@@ -4,14 +4,13 @@ import os
 import re
 
 import pandas as pd
-from IPython.display import Markdown, display
 from llama_index.core import Document, PropertyGraphIndex, Settings
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
-from llama_index.llms.groq import Groq
+from llama_index.llms.openai import OpenAI
 
-from core_classes import GraphRAGExtractor, GraphRAGQueryEngine, GraphRAGStore
+from core_classes import GraphRAGExtractor, GraphRAGStore
 
 NEO4JPASSWORD = "neo4j2026"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -21,7 +20,7 @@ print("Setup local embedding model ...")
 Settings.embed_model = HuggingFaceEmbedding(
     model_name="KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
 )
-Settings.llm = Groq(model="meta-llama/llama-4-scout-17b-16e-instruct")
+Settings.llm = OpenAI(model="meta-llama/llama-4-scout-17b-16e-instruct")
 
 print("Setup logging ...")
 # setup logging
@@ -32,7 +31,8 @@ logger = logging.getLogger(__name__)
 # news = pd.read_csv("input/csv/news_articles.csv")
 # news.head()
 input_file = "news_articles.csv"
-input_path = os.path.join(BASE_DIR, "..", "input", "csv", input_file)
+# input_path = os.path.join(BASE_DIR, "..", "input", "csv", input_file)
+input_path = os.path.join(BASE_DIR, "..", "input", "plaintext", input_file)
 data_csv = pd.read_csv(input_path, nrows=516)
 data_csv.head()
 
@@ -51,7 +51,7 @@ print("Extract nodes from documents ...")
 nodes = splitter.get_nodes_from_documents(documents)
 # source llm
 
-llm = Groq(
+llm = OpenAI(
     model="meta-llama/llama-4-scout-17b-16e-instruct",
     # CHANGE THIS!! UNSAFE!!
     # api_key="",

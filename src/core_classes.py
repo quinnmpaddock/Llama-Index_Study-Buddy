@@ -3,8 +3,6 @@ import re
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Union
 
-# from graspologic.partition import hierarchical_leiden
-from IPython.display import Markdown, display
 from llama_index.core import PropertyGraphIndex, Settings
 from llama_index.core.async_utils import run_jobs
 from llama_index.core.base.response.schema import Response
@@ -21,7 +19,6 @@ from llama_index.core.prompts.default_prompts import \
 from llama_index.core.query_engine import CustomQueryEngine
 from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
-from llama_index.llms.groq import Groq
 
 # import networkx as nx
 

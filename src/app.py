@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from llama_index.core import PropertyGraphIndex, Settings
 from llama_index.core.base.response.schema import Response
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.llms.groq import Groq
+from llama_index.llms.openai import OpenAI
 from pydantic import BaseModel, Field
 
 # Import custom classes from local directory
@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
         Settings.embed_model = HuggingFaceEmbedding(
             model_name="KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
         )
-        Settings.llm = Groq(model="meta-llama/llama-4-scout-17b-16e-instruct")
+        Settings.llm = OpenAI(model="meta-llama/llama-4-scout-17b-16e-instruct")
 
         # 2. Load Persisted Summaries
         if not os.path.exists(SUMMARIES_PATH):
