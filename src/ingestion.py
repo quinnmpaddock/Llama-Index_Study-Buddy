@@ -17,7 +17,7 @@ class DocumentIngestion:
         self.docling_reader = DoclingReader(export_type=DoclingReader.ExportType.JSON)
         self.docling_parser = DoclingNodeParser()
         self.md_reader = MarkdownReader()
-        self.csv_reader = CSVReader()
+        self.csv_reader = CSVReader(concat_rows=False)
         self.txt_reader = FlatReader()
 
     DOCLING_EXTENSIONS = {".pdf", ".docx", ".pptx", ".html", ".xlsx"}
@@ -35,7 +35,9 @@ class DocumentIngestion:
             ".txt": self.txt_reader,
         }
 
-        dir_reader = SimpleDirectoryReader(file_path, file_extractor=file_extractor)
+        dir_reader = SimpleDirectoryReader(
+            input_dir=file_path, file_extractor=file_extractor
+        )
 
         all_nodes: List[BaseNode] = []
         for docs in dir_reader.iter_data():
@@ -57,18 +59,18 @@ class DocumentIngestion:
         else:
             return self.text_splitter
 
-    def process_via_docling(self, docs: Sequence[Document]) -> List[BaseNode]:
-        return self.docling_parser.get_nodes_from_documents(documents=docs)
-
-    def process_md(self, docs: Sequence[Document]) -> List[BaseNode]:
-        return self.md_parser.get_nodes_from_documents(documents=docs)
-
-    def process_json(self, docs: Sequence[Document]) -> List[BaseNode]:
-        return self.json_parser.get_nodes_from_documents(documents=docs)
-
-    def process_csv(self, docs: Sequence[Document]) -> List[BaseNode]:
-        # CSVReader produces one Document per row; just return as text nodes
-        return self.text_splitter.get_nodes_from_documents(documents=docs)
-
-    def process_txt(self, docs: Sequence[Document]) -> List[BaseNode]:
-        return self.text_splitter.get_nodes_from_documents(documents=docs)
+    # def process_via_docling(self, docs: Sequence[Document]) -> List[BaseNode]:
+    #     return self.docling_parser.get_nodes_from_documents(documents=docs)
+    #
+    # def process_md(self, docs: Sequence[Document]) -> List[BaseNode]:
+    #     return self.md_parser.get_nodes_from_documents(documents=docs)
+    #
+    # def process_json(self, docs: Sequence[Document]) -> List[BaseNode]:
+    #     return self.json_parser.get_nodes_from_documents(documents=docs)
+    #
+    # def process_csv(self, docs: Sequence[Document]) -> List[BaseNode]:
+    #     # CSVReader produces one Document per row; just return as text nodes
+    #     return self.text_splitter.get_nodes_from_documents(documents=docs)
+    #
+    # def process_txt(self, docs: Sequence[Document]) -> List[BaseNode]:
+    #     return self.text_splitter.get_nodes_from_documents(documents=docs)

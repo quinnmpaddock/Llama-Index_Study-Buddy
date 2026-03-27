@@ -11,6 +11,7 @@ from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
 from llama_index.llms.openai import OpenAI
 
 from core_classes import GraphRAGExtractor, GraphRAGStore
+from ingestion import DocumentIngestion
 
 NEO4JPASSWORD = "neo4j2026"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,7 +23,7 @@ Settings.embed_model = HuggingFaceEmbedding(
 )
 Settings.llm = OpenAI(model="meta-llama/llama-4-scout-17b-16e-instruct")
 
-print("Setup logging ...")
+# print("Setup logging ...")
 # setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,33 +31,33 @@ logger = logging.getLogger(__name__)
 # TEMP - specify the test data location
 # news = pd.read_csv("input/csv/news_articles.csv")
 # news.head()
-input_file = "news_articles.csv"
+# input_file = "news_articles.csv"
 # input_path = os.path.join(BASE_DIR, "..", "input", "csv", input_file)
-input_path = os.path.join(BASE_DIR, "..", "input", "plaintext", input_file)
-data_csv = pd.read_csv(input_path, nrows=516)
-data_csv.head()
+# data_csv = pd.read_csv(input_path, nrows=516)
+# data_csv.head()
+input_path = os.path.join(BASE_DIR, "..", "input")
 
 # input csv => array
-documents = [
-    Document(text=f"{row['title']}: {row['text']}", metadata={"title": row["title"]})
-    for i, row in data_csv.iterrows()
-]
+# documents = [
+#     Document(text=f"{row['title']}: {row['text']}", metadata={"title": row["title"]})
+#     for i, row in data_csv.iterrows()
+# ]
+#
+# splitter = SentenceSplitter(
+#     chunk_size=1024,
+#     chunk_overlap=20,
+# )
 
-splitter = SentenceSplitter(
-    chunk_size=1024,
-    chunk_overlap=20,
-)
-
-print("Extract nodes from documents ...")
-nodes = splitter.get_nodes_from_documents(documents)
-# source llm
+# print("Extract nodes from documents ...")
+# nodes = splitter.get_nodes_from_documents(documents)
+# # source llm
 
 llm = OpenAI(
     model="meta-llama/llama-4-scout-17b-16e-instruct",
     # CHANGE THIS!! UNSAFE!!
     # api_key="",
 )
-print("LLM called!")
+# print("LLM called!")
 
 # test llm connection
 # response = llm.complete("Explain the importance of low latency LLMs")
@@ -101,6 +102,11 @@ def parse_fn(response_str: str):
 
 
 def main():
+    ingestor = DocumentIngestion()
+    print(f"Extracting nodes from {input_path}")
+    nodes = ingestor.ingestion(input_path)
+    print(f"Extracted {len(nodes)} nodes.")
+
     print("Extracting triplets ...")
     with open(template_prompt, "r", encoding="utf-8") as f:
         KG_TRIPLET_EXTRACT_TMPL = f.read()

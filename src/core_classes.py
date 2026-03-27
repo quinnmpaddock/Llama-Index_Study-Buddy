@@ -269,7 +269,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                 n.name AS node,
                 type(r) as rel_type,
                 r.relationship_description AS description,
-                coalesce(r.title, 'Unknown Source') AS source,
+                coalesce(r.file_name, 'Unknown') AS source,
                 m.name as neighbor 
         """
         results = self._run_cypher(query)
