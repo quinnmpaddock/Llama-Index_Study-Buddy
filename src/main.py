@@ -54,6 +54,7 @@ input_path = os.path.join(BASE_DIR, "..", "input")
 
 llm = OpenAI(
     model="meta-llama/llama-4-scout-17b-16e-instruct",
+    api_base="https://api.groq.com/openai/v1",
     # CHANGE THIS!! UNSAFE!!
     # api_key="",
 )

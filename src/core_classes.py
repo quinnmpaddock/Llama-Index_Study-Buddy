@@ -98,8 +98,11 @@ class GraphRAGExtractor(TransformComponent):
                 text=text,
                 max_knowledge_triplets=self.max_paths_per_chunk,
             )
+            # TEST
+            # print(f"DEBUG raw llm response: {llm_response}")
             entities, entities_relationship = self.parse_fn(llm_response)
-        except ValueError:
+        except ValueError as e:
+            print(f"DEBUG ValueError: {e}")
             entities = []
             entities_relationship = []
 
