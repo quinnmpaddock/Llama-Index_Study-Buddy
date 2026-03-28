@@ -69,6 +69,7 @@ template_prompt = os.path.join(BASE_DIR, template_loc, template_fileName)
 
 
 def parse_fn(response_str: str):
+    print(f"DEBUG: LLM Response: {response_str}")
     json_pattern = r"\{.*\}"
     match = re.search(json_pattern, response_str, re.DOTALL)
     entities = []
@@ -122,8 +123,18 @@ def main():
     graph_store = GraphRAGStore(
         username="neo4j", password=NEO4JPASSWORD, url="bolt://localhost:7687"
     )
-
-    print("Indexing data ...")
+    documents = [
+        Document(
+            text=node.get_content(),
+            metadata={
+                k: v
+                for k, v in node.metadata.items()
+                if isinstance(v, (str, int, float, bool))
+            },
+        )
+        for node in nodes
+    ]
+    print(f"Indexing {len(documents)} document chunks ...")
 
     index = PropertyGraphIndex(
         nodes=nodes,
@@ -132,7 +143,6 @@ def main():
         show_progress=True,
     )
 
-    index.property_graph_store.build_communities()
     # save community summaries to json
     output_dir = os.path.join(BASE_DIR, "..", "summaries")
     os.makedirs(output_dir, exist_ok=True)
