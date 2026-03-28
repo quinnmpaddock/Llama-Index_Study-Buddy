@@ -21,8 +21,14 @@ print("Setup local embedding model ...")
 Settings.embed_model = HuggingFaceEmbedding(
     model_name="KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
 )
-Settings.llm = OpenAI(model="meta-llama/llama-4-scout-17b-16e-instruct")
-
+Settings.llm = OpenAILike(
+    model="meta-llama/llama-4-scout-17b-16e-instruct",
+    api_base="https://api.groq.com/openai/v1",
+    api_key=os.environ["OPENAI_API_KEY"],
+    is_chat_model=True,
+    # CHANGE THIS!! UNSAFE!!
+    # api_key="",
+)
 # print("Setup logging ...")
 # setup logging
 logging.basicConfig(level=logging.INFO)
