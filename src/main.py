@@ -8,7 +8,7 @@ from llama_index.core import Document, PropertyGraphIndex, Settings
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
-from llama_index.llms.openai import OpenAI
+from llama_index.llms.openai_like import OpenAILike
 
 from core_classes import GraphRAGExtractor, GraphRAGStore
 from ingestion import DocumentIngestion
@@ -52,9 +52,11 @@ input_path = os.path.join(BASE_DIR, "..", "input")
 # nodes = splitter.get_nodes_from_documents(documents)
 # # source llm
 
-llm = OpenAI(
+llm = OpenAILike(
     model="meta-llama/llama-4-scout-17b-16e-instruct",
     api_base="https://api.groq.com/openai/v1",
+    api_key=os.environ["OPENAI_API_KEY"],
+    is_chat_model=True,
     # CHANGE THIS!! UNSAFE!!
     # api_key="",
 )
