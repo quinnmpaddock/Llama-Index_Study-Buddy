@@ -225,7 +225,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             # project the graph to memory
             self._run_cypher(
                 f"""
-                MATCH (source)-[r]->(target)
+                MATCH (__Entity__)-[r]->(__Entity__)
                 Return gds.graph.project(
                     '{self.graph_name}',
                     source,
@@ -242,9 +242,9 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             self._run_cypher(
                 f"""
                 CALL gds.leiden.write('{self.graph_name}', {{
-                    writeProperty: 'community_ids',
+                    writeProperty: 'community_id',
                     randomSeed: 19,
-                    includeIntermediateCommunities: true,
+                    includeIntermediateCommunities: false,
                     concurrency: 1
                 }})
                 YIELD communityCount
