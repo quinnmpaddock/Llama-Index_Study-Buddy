@@ -158,6 +158,7 @@ def main():
     summary_path = os.path.join(output_dir, "community_summaries.json")
     entity_info_path = os.path.join(output_dir, "entity_info.json")
 
+    # persisting community summaries
     if os.path.exists(summary_path):
         if (
             input(f"'{summary_path}' already exists. Overwrite? (y/n):").strip().lower()
@@ -168,18 +169,8 @@ def main():
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(index.property_graph_store.community_summary, f, indent=4)
     print(f"Community summaries saved to {summary_path}")
-    # query_engine = GraphRAGQueryEngine(
-    #     graph_store=index.property_graph_store,
-    #     llm=llm,
-    #     index=index,
-    #     similarity_top_k=10,
-    # )
 
-    # response = query_engine.query("What are the main news discussed in the document?")
-
-    # print("Displaying response ...")
-    # print(response.response)
-
+    # persisting entity info paths
     if os.path.exists(entity_info_path):
         if (
             input(f"'{entity_info_path}' already exists. Overwrite? (y/n):")

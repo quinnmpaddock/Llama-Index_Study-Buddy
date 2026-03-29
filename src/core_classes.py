@@ -212,7 +212,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
 
     def build_communities(self):
         """Builds communities from the graph and persists them to the neo4j database"""
-
+        print("DEBUG: starting build_communitites")
         # check for existing graph projection
         # try:
         #     self._run_cypher(
@@ -251,12 +251,15 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             """
             )
             print("DEBUG: leiden succeeded")
+        except Exception as e:
+            print(f"DEBUG: build_communities failed: {type(e).__name__}: {e}")
         finally:
             # drop graph projection
+            print("DEBUG: leiden or projection failed")
             self._run_cypher(
                 f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
             )
-        self._collect_community_info()
+            self._collect_community_info()
 
     def _collect_community_info(self):
         """
