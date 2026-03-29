@@ -236,6 +236,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                 )
             """
             )
+            print("DEBUG: projection succeeded")
 
             # run leiden community detection and write to neo4j
             self._run_cypher(
@@ -249,6 +250,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                 YIELD communityCount
             """
             )
+            print("DEBUG: leiden succeeded")
         finally:
             # drop graph projection
             self._run_cypher(
