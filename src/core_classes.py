@@ -269,8 +269,8 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
 
         query = """
             MATCH (n)
-            WHERE n.community_ids IS NOT NULL
-            UNWIND n.community_ids AS community_id
+            WHERE n.community_id IS NOT NULL
+            UNWIND n.community_id AS community_id
             OPTIONAL MATCH (n)-[r]-(m)
             RETURN
                 community_id,
