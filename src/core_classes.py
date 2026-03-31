@@ -1,10 +1,9 @@
 import asyncio
 import re
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import (Any, Callable, Dict, List, LiteralString, Optional, Union,
+                    cast)
 
-# from graspologic.partition import hierarchical_leiden
-from IPython.display import Markdown, display
 from llama_index.core import PropertyGraphIndex, Settings
 from llama_index.core.async_utils import run_jobs
 from llama_index.core.base.response.schema import Response
@@ -21,7 +20,6 @@ from llama_index.core.prompts.default_prompts import \
 from llama_index.core.query_engine import CustomQueryEngine
 from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
-from llama_index.llms.groq import Groq
 
 # import networkx as nx
 
@@ -101,8 +99,11 @@ class GraphRAGExtractor(TransformComponent):
                 text=text,
                 max_knowledge_triplets=self.max_paths_per_chunk,
             )
+            # TEST
+            # print(f"DEBUG raw llm response: {llm_response}")
             entities, entities_relationship = self.parse_fn(llm_response)
-        except ValueError:
+        except ValueError as e:
+            print(f"DEBUG ValueError: {e}")
             entities = []
             entities_relationship = []
 
@@ -187,7 +188,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                     "You are provided with a set of relationships from a knowledge graph, each represented as "
                     "entity1->entity2->relation->relationship_description. Your task is to create a summary of these "
                     "relationships. The summary should include the names of the entities involved and a concise synthesis of the relationship descriptions."
-                    "You must cite the source (provided in brackets) for every key fact or group of facts mentioned"
+                    "You must cite the source (provided in brackets) for every key fact or group of facts mentioned."
                     "The goal is to capture the most critical and relevant details that "
                     "highlight the nature and significance of each relationship. Ensure that the summary is coherent and "
                     "integrates the information in a way that emphasizes the key aspects of the relationships."
@@ -206,13 +207,13 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         if params is None:
             params = {}
         records, _, _ = self._driver.execute_query(
-            query, parameters_=params, database_=self.graph_name
+            cast(LiteralString, query), parameters_=params, database_=self.graph_name
         )
         return [record.data() for record in records]
 
     def build_communities(self):
         """Builds communities from the graph and persists them to the neo4j database"""
-
+        # print("DEBUG: starting build_communitites")
         # check for existing graph projection
         # try:
         #     self._run_cypher(
@@ -225,32 +226,37 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             # project the graph to memory
             self._run_cypher(
                 f"""
-                MATCH (source)-[r]->(target)
+                MATCH (n:__Entity__)-[r]->(m:__Entity__)
                 Return gds.graph.project(
                     '{self.graph_name}',
-                    source,
-                    target,
+                    n,
+                    m,
                     {{}},
                     {{ undirectedRelationshipTypes: ['*']}}
 
                 )
             """
             )
+            # print("DEBUG: projection succeeded")
 
             # run leiden community detection and write to neo4j
             self._run_cypher(
                 f"""
                 CALL gds.leiden.write('{self.graph_name}', {{
-                    writeProperty: 'community_ids',
+                    writeProperty: 'community_id',
                     randomSeed: 19,
-                    includeIntermediateCommunities: true,
+                    includeIntermediateCommunities: false,
                     concurrency: 1
                 }})
                 YIELD communityCount
             """
             )
+            # print("DEBUG: leiden succeeded")
+        except Exception as e:
+            print(f"DEBUG: build_communities failed: {type(e).__name__}: {e}")
         finally:
             # drop graph projection
+            # print("DEBUG: dropping graph projection")
             self._run_cypher(
                 f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
             )
@@ -264,15 +270,15 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
 
         query = """
             MATCH (n)
-            WHERE n.community_ids IS NOT NULL
-            UNWIND n.community_ids AS community_id
+            WHERE n.community_id IS NOT NULL
+            UNWIND n.community_id AS community_id
             OPTIONAL MATCH (n)-[r]-(m)
             RETURN
                 community_id,
                 n.name AS node,
                 type(r) as rel_type,
                 r.relationship_description AS description,
-                coalesce(r.title, 'Unknown Source') AS source,
+                coalesce(r.file_name, 'Unknown') AS source,
                 m.name as neighbor 
         """
         results = self._run_cypher(query)

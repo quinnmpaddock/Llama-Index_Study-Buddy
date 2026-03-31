@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from llama_index.core import PropertyGraphIndex, Settings
 from llama_index.core.base.response.schema import Response
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.llms.groq import Groq
+from llama_index.llms.openai_like import OpenAILike
 from pydantic import BaseModel, Field
 
 # Import custom classes from local directory
@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Constants (mirroring main.py)
-NEO4JPASSWORD = "Drewert237?"
+NEO4JPASSWORD = "neo4j2026"
 NEO4J_URL = "bolt://localhost:7687"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUMMARIES_PATH = os.path.join(BASE_DIR, "..", "summaries", "community_summaries.json")
@@ -47,8 +47,17 @@ async def lifespan(app: FastAPI):
         Settings.embed_model = HuggingFaceEmbedding(
             model_name="KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
         )
-        Settings.llm = Groq(model="meta-llama/llama-4-scout-17b-16e-instruct")
 
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is required")
+
+        Settings.llm = OpenAILike(
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            api_base="https://api.groq.com/openai/v1",
+            api_key=api_key,
+            is_chat_model=True,
+        )
         # 2. Load Persisted Summaries
         if not os.path.exists(SUMMARIES_PATH):
             logger.error(

@@ -4,16 +4,16 @@ import os
 import re
 
 import pandas as pd
-from IPython.display import Markdown, display
 from llama_index.core import Document, PropertyGraphIndex, Settings
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
-from llama_index.llms.groq import Groq
+from llama_index.llms.openai_like import OpenAILike
 
-from core_classes import GraphRAGExtractor, GraphRAGQueryEngine, GraphRAGStore
+from core_classes import GraphRAGExtractor, GraphRAGStore
+from ingestion import DocumentIngestion
 
-NEO4JPASSWORD = "Drewert237?"
+NEO4JPASSWORD = "neo4j2026"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 print("Setup local embedding model ...")
@@ -21,9 +21,13 @@ print("Setup local embedding model ...")
 Settings.embed_model = HuggingFaceEmbedding(
     model_name="KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
 )
-Settings.llm = Groq(model="meta-llama/llama-4-scout-17b-16e-instruct")
-
-print("Setup logging ...")
+Settings.llm = OpenAILike(
+    model="meta-llama/llama-4-scout-17b-16e-instruct",
+    api_base="https://api.groq.com/openai/v1",
+    api_key=os.environ["OPENAI_API_KEY"],
+    is_chat_model=True,
+)
+# print("Setup logging ...")
 # setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,32 +35,36 @@ logger = logging.getLogger(__name__)
 # TEMP - specify the test data location
 # news = pd.read_csv("input/csv/news_articles.csv")
 # news.head()
-input_file = "news_articles.csv"
-input_path = os.path.join(BASE_DIR, "..", "input", "csv", input_file)
-data_csv = pd.read_csv(input_path, nrows=516)
-data_csv.head()
+# input_file = "news_articles.csv"
+# input_path = os.path.join(BASE_DIR, "..", "input", "csv", input_file)
+# data_csv = pd.read_csv(input_path, nrows=516)
+# data_csv.head()
+input_path = os.path.join(BASE_DIR, "..", "input")
 
 # input csv => array
-documents = [
-    Document(text=f"{row['title']}: {row['text']}", metadata={"title": row["title"]})
-    for i, row in data_csv.iterrows()
-]
+# documents = [
+#     Document(text=f"{row['title']}: {row['text']}", metadata={"title": row["title"]})
+#     for i, row in data_csv.iterrows()
+# ]
+#
+# splitter = SentenceSplitter(
+#     chunk_size=1024,
+#     chunk_overlap=20,
+# )
 
-splitter = SentenceSplitter(
-    chunk_size=1024,
-    chunk_overlap=20,
-)
+# print("Extract nodes from documents ...")
+# nodes = splitter.get_nodes_from_documents(documents)
+# # source llm
 
-print("Extract nodes from documents ...")
-nodes = splitter.get_nodes_from_documents(documents)
-# source llm
-
-llm = Groq(
+llm = OpenAILike(
     model="meta-llama/llama-4-scout-17b-16e-instruct",
+    api_base="https://api.groq.com/openai/v1",
+    api_key=os.environ["OPENAI_API_KEY"],
+    is_chat_model=True,
     # CHANGE THIS!! UNSAFE!!
     # api_key="",
 )
-print("LLM called!")
+# print("LLM called!")
 
 # test llm connection
 # response = llm.complete("Explain the importance of low latency LLMs")
@@ -68,6 +76,7 @@ template_prompt = os.path.join(BASE_DIR, template_loc, template_fileName)
 
 
 def parse_fn(response_str: str):
+    print(f"DEBUG: LLM Response: {response_str}")
     json_pattern = r"\{.*\}"
     match = re.search(json_pattern, response_str, re.DOTALL)
     entities = []
@@ -101,6 +110,11 @@ def parse_fn(response_str: str):
 
 
 def main():
+    ingestor = DocumentIngestion()
+    print(f"Extracting nodes from {input_path}")
+    nodes = ingestor.ingestion(input_path)
+    print(f"Extracted {len(nodes)} nodes.")
+
     print("Extracting triplets ...")
     with open(template_prompt, "r", encoding="utf-8") as f:
         KG_TRIPLET_EXTRACT_TMPL = f.read()
@@ -116,8 +130,18 @@ def main():
     graph_store = GraphRAGStore(
         username="neo4j", password=NEO4JPASSWORD, url="bolt://localhost:7687"
     )
-
-    print("Indexing data ...")
+    documents = [
+        Document(
+            text=node.get_content(),
+            metadata={
+                k: v
+                for k, v in node.metadata.items()
+                if isinstance(v, (str, int, float, bool))
+            },
+        )
+        for node in nodes
+    ]
+    print(f"Indexing {len(documents)} document chunks ...")
 
     index = PropertyGraphIndex(
         nodes=nodes,
@@ -126,13 +150,14 @@ def main():
         show_progress=True,
     )
 
-    index.property_graph_store.build_communities()
     # save community summaries to json
+    index.property_graph_store.get_community_summaries()
     output_dir = os.path.join(BASE_DIR, "..", "summaries")
     os.makedirs(output_dir, exist_ok=True)
     summary_path = os.path.join(output_dir, "community_summaries.json")
     entity_info_path = os.path.join(output_dir, "entity_info.json")
 
+    # persisting community summaries
     if os.path.exists(summary_path):
         if (
             input(f"'{summary_path}' already exists. Overwrite? (y/n):").strip().lower()
@@ -143,21 +168,13 @@ def main():
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(index.property_graph_store.community_summary, f, indent=4)
     print(f"Community summaries saved to {summary_path}")
-    # query_engine = GraphRAGQueryEngine(
-    #     graph_store=index.property_graph_store,
-    #     llm=llm,
-    #     index=index,
-    #     similarity_top_k=10,
-    # )
 
-    # response = query_engine.query("What are the main news discussed in the document?")
-
-    # print("Displaying response ...")
-    # print(response.response)
-
+    # persisting entity info paths
     if os.path.exists(entity_info_path):
         if (
-            input(f"'{entity_info_path}' already exists. Overwrite? (y/n):").strip().lower()
+            input(f"'{entity_info_path}' already exists. Overwrite? (y/n):")
+            .strip()
+            .lower()
             != "y"
         ):
             print("Operation cancelled.")

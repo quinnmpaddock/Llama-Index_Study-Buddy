@@ -82,7 +82,9 @@
             buildInputs = pkgs.lib.optionals pkgs.stdenv.isLinux linuxDisplayLibs;
 
             # Ensure libraries are available to dynamically linked binaries (like torch)
-            LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (pkgs.lib.optionals pkgs.stdenv.isLinux linuxDisplayLibs);
+            LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (
+              pkgs.lib.optionals pkgs.stdenv.isLinux linuxDisplayLibs
+            );
 
             postShellHook = ''
               export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath linuxDisplayLibs}:$LD_LIBRARY_PATH"
@@ -123,7 +125,7 @@
               pkgs.ruff
               # or
               # python.pkgs.ruff
-              numpy_1
+              numpy
               pandas
               setuptools
               wheel
