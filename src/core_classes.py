@@ -256,10 +256,11 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             print(f"DEBUG: build_communities failed: {type(e).__name__}: {e}")
         finally:
             # drop graph projection
+            # print("DEBUG: dropping graph projection")
             self._run_cypher(
                 f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
             )
-            self._collect_community_info()
+        self._collect_community_info()
 
     def _collect_community_info(self):
         """

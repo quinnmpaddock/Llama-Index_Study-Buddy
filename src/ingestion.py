@@ -45,18 +45,18 @@ class DocumentIngestion:
             parser = self.get_parser_for_doc(docs[0])
             nodes = parser.get_nodes_from_documents(docs)
             # Enforce chunk size
-            if parser != self.text_splitter:
-                split_nodes = []
-                for node in nodes:
-                    chunks = self.text_splitter.split_text(node.get_content())
-                    for chunk in chunks:
-                        split_nodes.append(
-                            TextNode(
-                                text=chunk,
-                                metadata=node.metadata.copy(),
-                                relationships=node.relationships,
-                            )
-                        )
+            # if parser != self.text_splitter:
+            #     split_nodes = []
+            #     for node in nodes:
+            #         chunks = self.text_splitter.split_text(node.get_content())
+            #         for chunk in chunks:
+            #             split_nodes.append(
+            #                 TextNode(
+            #                     text=chunk,
+            #                     metadata=node.metadata.copy(),
+            #                     relationships=node.relationships,
+            #                 )
+            #             )
 
             if nodes:
                 print(f"DEBUG: First node metadata keys: {nodes[0].metadata.keys()}")
