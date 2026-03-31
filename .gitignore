@@ -14,6 +14,7 @@ __pycache__/
 # Data & Database
 data/databases/
 data/transactions/
+data/server_id
 # Assuming input data might be large or local-only, but strictness depends on you.
 # keeping 'input/' tracked for now based on your current setup.
 
@@ -24,3 +25,4 @@ plugins/*.jar
 GEMINI.md
 GDS_LEIDEN_MIGRATION.md
 *GEMINI*
+
