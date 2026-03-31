@@ -26,8 +26,6 @@ Settings.llm = OpenAILike(
     api_base="https://api.groq.com/openai/v1",
     api_key=os.environ["OPENAI_API_KEY"],
     is_chat_model=True,
-    # CHANGE THIS!! UNSAFE!!
-    # api_key="",
 )
 # print("Setup logging ...")
 # setup logging

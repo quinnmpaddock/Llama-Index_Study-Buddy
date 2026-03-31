@@ -1,1 +1,816 @@
-{}
+{
+    "UNIVERSITY OF OSLO": [
+        18,
+        18
+    ],
+    "OSLO": [
+        18,
+        18
+    ],
+    "CISPA HELMHOLTZ CENTER FOR INFORMATION SECURITY": [
+        19,
+        19
+    ],
+    "SAARBR\u00dcCKEN": [
+        19,
+        19
+    ],
+    "KNOWLEDGE GRAPHS": [
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12,
+        12
+    ],
+    "SOFTWARE TOOLS": [
+        12,
+        12
+    ],
+    "NEURO-SYMBOLIC AI": [
+        12,
+        12
+    ],
+    "SMT Solvers": [
+        10,
+        10,
+        10,
+        10,
+        10,
+        10
+    ],
+    "Knowledge Graphs": [
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10
+    ],
+    "Ontologies": [
+        10,
+        10,
+        10,
+        10
+    ],
+    "KGs": [
+        20,
+        20
+    ],
+    "RDF": [
+        20,
+        20,
+        20,
+        20,
+        20,
+        20,
+        20
+    ],
+    "Grammar-based Fuzzing": [
+        21,
+        21
+    ],
+    "Symbolic Execution": [
+        21,
+        21
+    ],
+    "OWL EL profile": [
+        20,
+        20,
+        20,
+        20
+    ],
+    "Input Grammars": [
+        20,
+        20,
+        20
+    ],
+    "TOOLS": [
+        22,
+        22
+    ],
+    "BUGS": [
+        22,
+        22,
+        22
+    ],
+    "MAINTAINERS": [
+        22,
+        22
+    ],
+    "KG APPLICATIONS": [
+        20,
+        20,
+        20
+    ],
+    "LANGUAGE-BASED TESTING": [
+        20,
+        20
+    ],
+    "ISLa Tool": [
+        23,
+        23,
+        23
+    ],
+    "Paper": [
+        23,
+        23,
+        23
+    ],
+    "Testing": [
+        24,
+        24
+    ],
+    "Test Input": [
+        24,
+        24
+    ],
+    "Fuzzer": [
+        25,
+        25
+    ],
+    "Miller et al.": [
+        25,
+        25,
+        25
+    ],
+    "MILLER": [
+        26,
+        26
+    ],
+    "EMACS": [
+        26,
+        26
+    ],
+    "FUZZING": [
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+    ],
+    "SYMBOLIC EXECUTION-BASED WHITE BOX FUZZERS": [
+        2,
+        2
+    ],
+    "FUZZ BLOCKERS": [
+        2,
+        2,
+        2
+    ],
+    "FUZZING CAMPAIGN": [
+        2,
+        2
+    ],
+    "BARR ET AL.": [
+        2,
+        2
+    ],
+    "CRASH ORACLE": [
+        2,
+        2
+    ],
+    "DIFFERENTIAL TESTING": [
+        27,
+        27,
+        27
+    ],
+    "Fuzzing": [
+        10,
+        10,
+        10,
+        10
+    ],
+    "Metamorphic Oracles": [
+        10,
+        10,
+        10
+    ],
+    "Commutativity of Addition": [
+        10,
+        10
+    ],
+    "FUZZERS": [
+        4,
+        4,
+        4
+    ],
+    "COMPILERS": [
+        4,
+        4
+    ],
+    "REASONERS": [
+        4,
+        4
+    ],
+    "CONTEXT-FREE GRAMMARS": [
+        5,
+        5,
+        5
+    ],
+    "ANTLR": [
+        5,
+        5
+    ],
+    "RFCS": [
+        5,
+        5
+    ],
+    "CFG": [
+        6,
+        6,
+        6,
+        6
+    ],
+    "C Compiler": [
+        6,
+        6
+    ],
+    "C Programs": [
+        6,
+        6,
+        6,
+        6,
+        6
+    ],
+    "ISLa": [
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6
+    ],
+    "ISLa Language Specification": [
+        7,
+        7
+    ],
+    "ISLa Language-Based Testing Tool": [
+        7,
+        7
+    ],
+    "ISLa Grammars": [
+        8,
+        8
+    ],
+    "RDF Turtle Syntax": [
+        8,
+        8
+    ],
+    "METAMORPHIC TESTING": [
+        27,
+        27
+    ],
+    "OWL REASONER EVALUATION": [
+        9,
+        9
+    ],
+    "OWL REASONERS": [
+        9,
+        9
+    ],
+    "Database Management Systems": [
+        10,
+        10
+    ],
+    "Application and Tools": [
+        10,
+        10
+    ],
+    "ERD\u0150S-R\u00c9NYI MODEL": [
+        11,
+        11
+    ],
+    "BARAB\u00c1SI-ALBERT MODEL": [
+        11,
+        11
+    ],
+    "KNOWLEDGE GRAPH SYNTHESIS": [
+        11,
+        11,
+        11
+    ],
+    "DATA-DRIVEN APPROACHES": [
+        12,
+        12,
+        12
+    ],
+    "TABULAR DATABASE DATA": [
+        12,
+        12
+    ],
+    "GENERATIVE NEURAL NETWORKS": [
+        13,
+        13
+    ],
+    "SCHEMA-DRIVEN APPROACHES": [
+        13,
+        13
+    ],
+    "GRAPHS": [
+        13,
+        13,
+        13
+    ],
+    "OUR WORK": [
+        12,
+        12,
+        12
+    ],
+    "PREVIOUS APPROACHES": [
+        12,
+        12
+    ],
+    "Compiler Testing": [
+        10,
+        10
+    ],
+    "OWL Reasoners": [
+        14,
+        14,
+        14
+    ],
+    "Compiler": [
+        14,
+        14
+    ],
+    "Differential Testing": [
+        10,
+        10,
+        10,
+        10
+    ],
+    "Knowledge Graph Applications": [
+        10,
+        10,
+        10
+    ],
+    "RDF/OWL technology stack": [
+        10,
+        10
+    ],
+    "EL REASONERS": [
+        15,
+        15
+    ],
+    "OWL PROFILE": [
+        15,
+        15
+    ],
+    "KNOWLEDGE GRAPH CONSTRUCTION TOOLS": [
+        16,
+        16
+    ],
+    "SHACL SHAPES": [
+        16,
+        16
+    ],
+    "John": [
+        17,
+        17
+    ],
+    "EL reasoners": [
+        44,
+        44
+    ],
+    "Fuzzing campaigns": [
+        44,
+        44
+    ],
+    "Integrated applications": [
+        17,
+        17
+    ],
+    "PROT\u00c9G\u00c9": [
+        45,
+        45
+    ],
+    "HERMIT": [
+        45,
+        45,
+        45,
+        45
+    ],
+    "OWL EL": [
+        6,
+        6,
+        6,
+        6
+    ],
+    "ISLA": [
+        6,
+        6
+    ],
+    "Ontology": [
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46
+    ],
+    "RDF-TTL": [
+        46,
+        46,
+        46
+    ],
+    "Fig. 1": [
+        46,
+        46
+    ],
+    "OWL-API": [
+        20,
+        20,
+        20,
+        20,
+        20,
+        20,
+        20
+    ],
+    "Reasoners": [
+        46,
+        46,
+        46,
+        46,
+        46,
+        46
+    ],
+    "Java": [
+        6,
+        6
+    ],
+    "Intel i7-1165G7 CPU": [
+        47,
+        47
+    ],
+    "Ubuntu 22.04": [
+        47,
+        47
+    ],
+    "RDF 1.1 Turtle File Format": [
+        6,
+        6
+    ],
+    "SPARQL-Style Prefix Definitions": [
+        6,
+        6
+    ],
+    "Test Case Generator": [
+        6,
+        6,
+        6,
+        6,
+        6,
+        6
+    ],
+    "Apache Jena": [
+        48,
+        48,
+        48,
+        48,
+        48
+    ],
+    "RDF Turtle standard": [
+        49,
+        49
+    ],
+    "Test case generator": [
+        49,
+        49
+    ],
+    "HermiT": [
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46
+    ],
+    "Pellet/Openllet": [
+        46,
+        46,
+        46,
+        46,
+        46,
+        46
+    ],
+    "ELK": [
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46
+    ],
+    "OWL EL Testing Campaign": [
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46
+    ],
+    "Test Cases": [
+        46,
+        46
+    ],
+    "Tools": [
+        46,
+        46,
+        46
+    ],
+    "Anomalies": [
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46
+    ],
+    "Openllet": [
+        46,
+        46
+    ],
+    "FOUND BUGS": [
+        45,
+        45
+    ],
+    "REPOSITORIES": [
+        50,
+        50
+    ],
+    "ISSUES": [
+        50,
+        50
+    ],
+    "RDF 1.1 TURTLE STANDARD": [
+        28,
+        28
+    ],
+    "RDF 1.2 TURTLE": [
+        29,
+        29
+    ],
+    "BUG (R1)": [
+        28,
+        28
+    ],
+    "REPORT": [
+        29,
+        29
+    ],
+    "Figure 3": [
+        48,
+        48,
+        48
+    ],
+    "Table 1": [
+        48,
+        48
+    ],
+    "J1": [
+        48,
+        48
+    ],
+    "Bugs": [
+        46,
+        46,
+        46
+    ],
+    "Class A": [
+        30,
+        30
+    ],
+    "Class B": [
+        30,
+        30
+    ],
+    ":B": [
+        46,
+        46,
+        46
+    ],
+    "ClassAssertion (:B :a)": [
+        46,
+        46
+    ],
+    "OPENLLET/PELLET (O5)": [
+        40,
+        40,
+        40
+    ],
+    "FIGURE 5": [
+        40,
+        40
+    ],
+    "DP": [
+        40,
+        40
+    ],
+    "Axiom": [
+        46,
+        46,
+        46,
+        46
+    ],
+    "PELLET/OPENLLET": [
+        41,
+        41,
+        41,
+        41,
+        41
+    ],
+    "INFERENCE/SOUNDNESS BUG": [
+        41,
+        41
+    ],
+    "ONTOLOGY": [
+        41,
+        41
+    ],
+    "GRAMMARS": [
+        42,
+        42,
+        42
+    ],
+    "PARSER": [
+        42,
+        42,
+        42
+    ],
+    "ERROR REPORT": [
+        43,
+        43
+    ],
+    "TOOL": [
+        43,
+        43
+    ],
+    "ERROR MESSAGES": [
+        12,
+        12
+    ],
+    "RDF-TTL 1.1 Standard": [
+        0,
+        0
+    ],
+    "Software Tools": [
+        0,
+        0,
+        0
+    ],
+    "Automated Testing": [
+        0,
+        0,
+        0,
+        0
+    ],
+    "Derived Oracles": [
+        0,
+        0
+    ],
+    "Generic Tool Classes": [
+        1,
+        1
+    ],
+    "Grammars": [
+        1,
+        1
+    ],
+    "SOFTWARE": [
+        2,
+        2
+    ],
+    "DEVELOPERS": [
+        2,
+        2
+    ],
+    "SOFTWARE RELIABILITY": [
+        12,
+        12
+    ],
+    "AUTOMATED TESTING": [
+        31,
+        31
+    ],
+    "GRAPH DATA": [
+        31,
+        31
+    ],
+    "Albert": [
+        32,
+        32
+    ],
+    "Barab\u00e1si": [
+        32,
+        32
+    ],
+    "Statistical Mechanics of Complex Networks": [
+        32,
+        32,
+        32
+    ],
+    "CAROTHERS, G.": [
+        33,
+        33
+    ],
+    "RDF 1.1 TURTLE": [
+        33,
+        33
+    ],
+    "CHAKRABARTI, D.": [
+        34,
+        34
+    ],
+    "R-MAT": [
+        34,
+        34
+    ],
+    "International Fuzzing Workshop": [
+        35,
+        35
+    ],
+    "Gao, W.": [
+        35,
+        35
+    ],
+    "Beyond the Coverage Plateau: A Comprehensive Study of Fuzz Blockers": [
+        35,
+        35,
+        35
+    ],
+    "LIU S": [
+        36,
+        36
+    ],
+    "INTERNATIONAL SYMPOSIUM ON SOFTWARE TESTING AND ANALYSIS": [
+        36,
+        36
+    ],
+    "LU Y": [
+        37,
+        37
+    ],
+    "PROC ACM PROGRAM LANG": [
+        37,
+        37
+    ],
+    "P\u00fcroja, D.": [
+        38,
+        38,
+        38
+    ],
+    "LDBC Social Network Benchmark": [
+        38,
+        38
+    ],
+    "TPCTC Technology Conference": [
+        38,
+        38
+    ],
+    "YUN, I.": [
+        39,
+        39
+    ],
+    "QSYM": [
+        39,
+        39,
+        39
+    ],
+    "SECURITY SYMPOSIUM": [
+        39,
+        39
+    ]
+}
