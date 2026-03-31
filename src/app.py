@@ -48,10 +48,14 @@ async def lifespan(app: FastAPI):
             model_name="KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
         )
 
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is required")
+
         Settings.llm = OpenAILike(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             api_base="https://api.groq.com/openai/v1",
-            api_key=os.environ["OPENAI_API_KEY"],
+            api_key=api_key,
             is_chat_model=True,
         )
         # 2. Load Persisted Summaries
