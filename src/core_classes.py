@@ -1,7 +1,8 @@
 import asyncio
 import re
 from collections import defaultdict
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import (Any, Callable, Dict, List, LiteralString, Optional, Union,
+                    cast)
 
 from llama_index.core import PropertyGraphIndex, Settings
 from llama_index.core.async_utils import run_jobs
@@ -206,7 +207,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         if params is None:
             params = {}
         records, _, _ = self._driver.execute_query(
-            query, parameters_=params, database_=self.graph_name
+            cast(LiteralString, query), parameters_=params, database_=self.graph_name
         )
         return [record.data() for record in records]
 
