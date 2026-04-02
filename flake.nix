@@ -134,6 +134,7 @@
               pkgs.rustc
               pkgs.cargo
               pkgs.nodejs
+              pkgs.autoPatchelfHook
 
             ];
           };
