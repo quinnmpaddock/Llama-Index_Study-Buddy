@@ -130,6 +130,11 @@
               setuptools
               wheel
 
+              # Rust stuff
+              pkgs.rustc
+              pkgs.cargo
+              pkgs.nodejs
+
             ];
           };
         }
