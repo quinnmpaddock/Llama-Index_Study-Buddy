@@ -59,6 +59,8 @@
             glib
             fontconfig
             stdenv.cc.cc.lib
+            zlib
+            gcc-unwrapped
           ];
 
           # numpy-pinned = python.pkgs.numpy.overridePythonAttrs (oldAttrs: rec {
