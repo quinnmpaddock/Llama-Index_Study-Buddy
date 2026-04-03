@@ -30,4 +30,5 @@ GDS_LEIDEN_MIGRATION.md
 node_modules/
 *AGENTS*
 .opencode
+*hermes_conversation*
 
