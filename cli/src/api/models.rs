@@ -52,3 +52,63 @@ impl std::fmt::Display for CommunityId {
 pub struct HealthResponse {
     pub message: String,
 }
+
+// =============================================================================
+// Entity Models
+// =============================================================================
+
+/// Single entity from search results
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EntityInfo {
+    pub name: String,
+    pub communities: Vec<i32>,
+}
+
+/// Response from /entities endpoint (search)
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EntitySearchResponse {
+    pub entities: Vec<EntityInfo>,
+    pub total: i32,
+}
+
+/// Response from /entities/{name} endpoint (single entity details)
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EntityDetail {
+    pub name: String,
+    pub communities: Vec<i32>,
+}
+
+// =============================================================================
+// Community Models
+// =============================================================================
+
+/// Single community from list
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CommunityInfo {
+    pub id: i32,
+    pub entity_count: i32,
+    pub summary_preview: String,
+}
+
+/// Response from /communities endpoint (list all)
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CommunityListResponse {
+    pub communities: Vec<CommunityInfo>,
+    pub total: i32,
+}
+
+/// Response from /communities/{id} endpoint (single community details)
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CommunityDetail {
+    pub id: i32,
+    pub summary: String,
+    pub entity_count: i32,
+}
+
+/// Response from /communities/{id}/entities endpoint
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CommunityEntitiesResponse {
+    pub community_id: i32,
+    pub entities: Vec<String>,
+    pub total: i32,
+}

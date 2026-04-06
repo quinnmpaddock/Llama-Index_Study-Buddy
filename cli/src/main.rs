@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use study_buddy::{
     api::ApiClient,
-    commands::QueryCommand,
+    commands::{CommunityAction, CommunityCommand, QueryCommand, SearchCommand},
     config::Settings,
     output::{print_error, print_status, OutputFormat},
 };
@@ -38,6 +38,26 @@ enum Commands {
         top_k: i32,
     },
 
+    /// Search for entities in the knowledge graph
+    Search {
+        /// The search term to find matching entities
+        query: Option<String>,
+
+        /// Get details for a specific entity by name
+        #[arg(short, long)]
+        entity: Option<String>,
+
+        /// Maximum number of results (1-200)
+        #[arg(short, long, default_value = "50")]
+        limit: i32,
+    },
+
+    /// Explore graph communities
+    Community {
+        #[command(subcommand)]
+        action: CommunityCommands,
+    },
+
     /// Start interactive TUI mode
     Tui,
 
@@ -46,6 +66,29 @@ enum Commands {
 
     /// Show current configuration
     Config,
+}
+
+#[derive(Subcommand, Debug)]
+enum CommunityCommands {
+    /// List all communities with summary previews
+    List,
+
+    /// Show details for a specific community
+    Show {
+        /// Community ID
+        id: i32,
+
+        /// Include entities in the output
+        #[arg(short, long)]
+        entities: bool,
+    },
+
+    /// Export all community summaries
+    Export {
+        /// Output file path (prints to stdout if not specified)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -85,6 +128,37 @@ async fn execute_command(args: Args, settings: &Settings) -> study_buddy::error:
             let cmd = QueryCommand::new(&query)
                 .with_top_k(top_k)
                 .with_format(args.format);
+
+            cmd.execute(&settings).await?;
+        }
+
+        Commands::Search { query, entity, limit } => {
+            let cmd = SearchCommand::new()
+                .with_limit(limit)
+                .with_format(args.format);
+
+            let cmd = if let Some(name) = entity {
+                cmd.with_entity(name)
+            } else if let Some(q) = query {
+                cmd.with_query(q)
+            } else {
+                cmd
+            };
+
+            cmd.execute(&settings).await?;
+        }
+
+        Commands::Community { action } => {
+            let show_entities = matches!(action, CommunityCommands::Show { entities: true, .. });
+            let community_action = match action {
+                CommunityCommands::List => CommunityAction::List,
+                CommunityCommands::Show { id, entities: _ } => CommunityAction::Show { id },
+                CommunityCommands::Export { output } => CommunityAction::Export { output },
+            };
+
+            let cmd = CommunityCommand::new(community_action)
+                .with_format(args.format)
+                .with_entities(show_entities);
 
             cmd.execute(&settings).await?;
         }

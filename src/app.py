@@ -2,9 +2,9 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from llama_index.core import PropertyGraphIndex, Settings
 from llama_index.core.base.response.schema import Response
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
@@ -102,6 +102,12 @@ async def lifespan(app: FastAPI):
             graph_store=graph_store, index=index, llm=Settings.llm
         )
 
+        # 5. Store data for API endpoints
+        app.state.community_summaries = {
+            str(k): v for k, v in community_summaries.items()
+        }
+        app.state.entity_info = entity_info
+
         logger.info("GraphRAG Engine successfully initialized.")
     except Exception as e:
         logger.error(f"Failed to initialize engine: {str(e)}")
@@ -150,6 +156,173 @@ async def query_graph(request: QueryRequest):
     except Exception as e:
         logger.error(f"Query error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Entity Models ---
+class EntitySearchResponse(BaseModel):
+    """Response for entity search."""
+
+    entities: List[Dict[str, object]]
+    total: int
+
+
+class EntityDetail(BaseModel):
+    """Details for a single entity."""
+
+    name: str
+    communities: List[int]
+
+
+# --- Community Models ---
+class CommunityListResponse(BaseModel):
+    """List of all communities."""
+
+    communities: List[Dict[str, object]]
+    total: int
+
+
+class CommunityDetail(BaseModel):
+    """Details for a single community."""
+
+    id: int
+    summary: str
+    entity_count: int
+
+
+class CommunityEntitiesResponse(BaseModel):
+    """Entities belonging to a community."""
+
+    community_id: int
+    entities: List[str]
+    total: int
+
+
+# --- Entity Endpoints ---
+@app.get("/entities", response_model=EntitySearchResponse)
+async def search_entities(
+    q: Optional[str] = Query(None, description="Search term for entity names"),
+    limit: int = Query(50, ge=1, le=200, description="Maximum results to return"),
+):
+    """
+    Search for entities in the knowledge graph.
+    If no query is provided, returns all entities.
+    """
+    if not hasattr(app.state, "entity_info"):
+        raise HTTPException(status_code=503, detail="Entity info not loaded")
+
+    entity_info = app.state.entity_info
+
+    if q:
+        # Case-insensitive search
+        q_lower = q.lower()
+        matches = [
+            {"name": name, "communities": list(set(communities))}
+            for name, communities in entity_info.items()
+            if q_lower in name.lower()
+        ]
+        # Sort by relevance (exact match first, then by name length)
+        matches.sort(key=lambda x: (x["name"].lower() != q_lower, len(x["name"])))
+    else:
+        matches = [
+            {"name": name, "communities": list(set(communities))}
+            for name, communities in entity_info.items()
+        ]
+        matches.sort(key=lambda x: x["name"].lower())
+
+    return {"entities": matches[:limit], "total": len(matches)}
+
+
+@app.get("/entities/{name}", response_model=EntityDetail)
+async def get_entity(name: str):
+    """
+    Get details for a specific entity by name.
+    """
+    if not hasattr(app.state, "entity_info"):
+        raise HTTPException(status_code=503, detail="Entity info not loaded")
+
+    entity_info = app.state.entity_info
+
+    # Case-insensitive lookup
+    for entity_name, communities in entity_info.items():
+        if entity_name.lower() == name.lower():
+            return {"name": entity_name, "communities": list(set(communities))}
+
+    raise HTTPException(status_code=404, detail=f"Entity '{name}' not found")
+
+
+# --- Community Endpoints ---
+@app.get("/communities", response_model=CommunityListResponse)
+async def list_communities():
+    """
+    List all communities with entity counts.
+    """
+    if not hasattr(app.state, "community_summaries"):
+        raise HTTPException(status_code=503, detail="Community summaries not loaded")
+
+    summaries = app.state.community_summaries
+
+    # Build community list with entity counts from entity_info
+    entity_info = app.state.entity_info
+    community_entities: Dict[int, List[str]] = {}
+
+    for entity_name, communities in entity_info.items():
+        for comm_id in communities:
+            if comm_id not in community_entities:
+                community_entities[comm_id] = []
+            community_entities[comm_id].append(entity_name)
+
+    communities = [
+        {
+            "id": comm_id,
+            "entity_count": len(set(community_entities.get(comm_id, []))),
+            "summary_preview": summaries.get(str(comm_id), "")[:100] + "...",
+        }
+        for comm_id in sorted(summaries.keys(), key=int)
+    ]
+
+    return {"communities": communities, "total": len(communities)}
+
+
+@app.get("/communities/{id}", response_model=CommunityDetail)
+async def get_community(id: int):
+    """
+    Get details for a specific community including its summary.
+    """
+    if not hasattr(app.state, "community_summaries"):
+        raise HTTPException(status_code=503, detail="Community summaries not loaded")
+
+    summaries = app.state.community_summaries
+    summary = summaries.get(str(id))
+
+    if summary is None:
+        raise HTTPException(status_code=404, detail=f"Community {id} not found")
+
+    # Count entities in this community
+    entity_info = app.state.entity_info
+    entity_count = sum(1 for communities in entity_info.values() if id in communities)
+
+    return {"id": id, "summary": summary, "entity_count": entity_count}
+
+
+@app.get("/communities/{id}/entities", response_model=CommunityEntitiesResponse)
+async def get_community_entities(id: int):
+    """
+    Get all entities belonging to a specific community.
+    """
+    if not hasattr(app.state, "community_summaries"):
+        raise HTTPException(status_code=503, detail="Community summaries not loaded")
+
+    if str(id) not in app.state.community_summaries:
+        raise HTTPException(status_code=404, detail=f"Community {id} not found")
+
+    entity_info = app.state.entity_info
+    entities = [name for name, communities in entity_info.items() if id in communities]
+
+    return {
+        "community_id": id,
+        "entities": sorted(set(entities)),
+        "total": len(entities),
+    }
 
 
 if __name__ == "__main__":
