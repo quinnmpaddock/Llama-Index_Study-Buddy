@@ -112,3 +112,103 @@ pub struct CommunityEntitiesResponse {
     pub entities: Vec<String>,
     pub total: i32,
 }
+
+// =============================================================================
+// Ingestion Models
+// =============================================================================
+
+/// Request for the /ingest endpoint
+#[derive(Debug, Clone, Serialize)]
+pub struct IngestRequest {
+    pub directory: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub files: Option<Vec<String>>,
+}
+
+/// Response from /ingest endpoint
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct IngestResponse {
+    pub status: String,
+    pub directory: String,
+    pub files_processed: Vec<String>,
+    pub total_nodes: i32,
+    #[serde(default)]
+    pub total_entities: i32,
+    #[serde(default)]
+    pub total_relationships: i32,
+    #[serde(default)]
+    pub communities_built: i32,
+    pub message: String,
+}
+
+/// Ingestion task status
+#[derive(Debug, Clone, Deserialize)]
+pub struct IngestStatus {
+    pub status: String,
+    pub progress: i32,
+    #[serde(default)]
+    pub total_nodes: i32,
+    #[serde(default)]
+    pub total_entities: i32,
+    #[serde(default)]
+    pub total_communities: i32,
+    #[serde(default)]
+    pub files_processed: Vec<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+/// File info from /ingest/preview endpoint
+#[derive(Debug, Clone, Deserialize)]
+pub struct IngestFileInfo {
+    pub name: String,
+    pub extension: String,
+    pub size_bytes: u64,
+}
+
+/// Response from /ingest/preview endpoint
+#[derive(Debug, Clone, Deserialize)]
+pub struct IngestPreviewResponse {
+    pub directory: String,
+    pub supported_extensions: Vec<String>,
+    pub files: Vec<IngestFileInfo>,
+    pub total_files: i32,
+}
+
+// =========================================================================
+// Summaries Endpoints
+// =========================================================================
+
+/// Summary version info
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SummaryVersion {
+    pub version: String,
+    pub created_at: String,
+    pub files: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub stats: std::collections::HashMap<String, i32>,
+}
+
+/// Response from /summaries endpoint
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SummaryListResponse {
+    pub current: Option<SummaryVersion>,
+    pub versions: Vec<SummaryVersionInfo>,
+}
+
+/// Version info in listing
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SummaryVersionInfo {
+    pub version: String,
+    pub filename: String,
+    pub modified: String,
+    pub size_bytes: u64,
+}
+
+/// Response from DELETE /summaries endpoint
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SummaryCleanupResponse {
+    pub deleted: Vec<String>,
+    pub kept: Vec<String>,
+    pub message: String,
+}

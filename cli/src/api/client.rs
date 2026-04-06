@@ -1,6 +1,8 @@
 use crate::api::models::{
     CommunityDetail, CommunityEntitiesResponse, CommunityListResponse, EntityDetail,
-    EntitySearchResponse, GraphQueryResponse, HealthResponse, QueryRequest,
+    EntitySearchResponse, GraphQueryResponse, HealthResponse, IngestPreviewResponse,
+    IngestRequest, IngestResponse, IngestStatus, QueryRequest, SummaryCleanupResponse,
+    SummaryListResponse, SummaryVersion,
 };
 use crate::config::Settings;
 use crate::error::{Result, StudyBuddyError};
@@ -182,6 +184,151 @@ impl ApiClient {
         }
 
         let result: CommunityEntitiesResponse = response.json().await?;
+        Ok(result)
+    }
+
+    // =========================================================================
+    // Ingestion Endpoints
+    // =========================================================================
+
+    /// Preview files that would be ingested from a directory
+    pub async fn preview_ingest(&self, directory: &str) -> Result<IngestPreviewResponse> {
+        let url = format!(
+            "{}/ingest/preview?directory={}",
+            self.base_url,
+            urlencoding::encode(directory)
+        );
+
+        let response = self.client.get(&url).send().await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(StudyBuddyError::ApiError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        let result: IngestPreviewResponse = response.json().await?;
+        Ok(result)
+    }
+
+    /// Ingest documents from a directory
+    pub async fn ingest(&self, request: IngestRequest) -> Result<IngestResponse> {
+        let url = format!("{}/ingest", self.base_url);
+
+        let response = self.client.post(&url).json(&request).send().await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(StudyBuddyError::ApiError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        let result: IngestResponse = response.json().await?;
+        Ok(result)
+    }
+
+    /// Get the status of an ingestion task
+    pub async fn get_ingest_status(&self, task_id: &str) -> Result<IngestStatus> {
+        let url = format!("{}/ingest/status/{}", self.base_url, task_id);
+
+        let response = self.client.get(&url).send().await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(StudyBuddyError::ApiError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        let result: IngestStatus = response.json().await?;
+        Ok(result)
+    }
+
+    // =========================================================================
+    // Summaries Endpoints
+    // =========================================================================
+
+    /// List all summary versions
+    pub async fn list_summaries(&self) -> Result<SummaryListResponse> {
+        let url = format!("{}/summaries", self.base_url);
+
+        let response = self.client.get(&url).send().await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(StudyBuddyError::ApiError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        let result: SummaryListResponse = response.json().await?;
+        Ok(result)
+    }
+
+    /// Get the current summary version info
+    pub async fn get_current_summary(&self) -> Result<SummaryVersion> {
+        let url = format!("{}/summaries/current", self.base_url);
+
+        let response = self.client.get(&url).send().await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(StudyBuddyError::ApiError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        let result: SummaryVersion = response.json().await?;
+        Ok(result)
+    }
+
+    /// Get a specific summary version's content
+    pub async fn get_summary_version(&self, version: &str) -> Result<serde_json::Value> {
+        let url = format!("{}/summaries/{}", self.base_url, version);
+
+        let response = self.client.get(&url).send().await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(StudyBuddyError::ApiError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        let result: serde_json::Value = response.json().await?;
+        Ok(result)
+    }
+
+    /// Delete old summary versions, keeping N most recent
+    pub async fn cleanup_summaries(&self, keep: i32) -> Result<SummaryCleanupResponse> {
+        let url = format!("{}/summaries?keep={}", self.base_url, keep);
+
+        let response = self.client.delete(&url).send().await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(StudyBuddyError::ApiError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
+        let result: SummaryCleanupResponse = response.json().await?;
         Ok(result)
     }
 }

@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use study_buddy::{
     api::ApiClient,
-    commands::{CommunityAction, CommunityCommand, QueryCommand, SearchCommand},
+    commands::{CommunityAction, CommunityCommand, IngestCommand, QueryCommand, SearchCommand, SummariesCommand},
     config::Settings,
     output::{print_error, print_status, OutputFormat},
 };
@@ -58,6 +58,20 @@ enum Commands {
         action: CommunityCommands,
     },
 
+    /// Ingest documents into the knowledge graph
+    Ingest {
+        /// Directory path containing documents to ingest
+        directory: String,
+
+        /// Specific files to ingest (optional, comma-separated or multiple args)
+        #[arg(short, long)]
+        files: Option<String>,
+
+        /// Skip confirmation prompt
+        #[arg(short, long)]
+        yes: bool,
+    },
+
     /// Start interactive TUI mode
     Tui,
 
@@ -66,6 +80,28 @@ enum Commands {
 
     /// Show current configuration
     Config,
+
+    /// Manage community summaries versions
+    Summaries {
+        #[command(subcommand)]
+        action: SummariesCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum SummariesCommands {
+    /// List all summary versions
+    List,
+
+    /// Show the current (active) summary version
+    Current,
+
+    /// Delete old summary versions, keeping N most recent
+    Cleanup {
+        /// Number of versions to keep (default: 5)
+        #[arg(default_value = "5")]
+        keep: i32,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -163,6 +199,26 @@ async fn execute_command(args: Args, settings: &Settings) -> study_buddy::error:
             cmd.execute(&settings).await?;
         }
 
+        Commands::Ingest { directory, files, yes } => {
+            let cmd = IngestCommand::new(directory)
+                .with_format(args.format)
+                .with_yes(yes);
+
+            let cmd = if let Some(files_str) = files {
+                // Parse comma-separated or space-separated files
+                let file_list: Vec<String> = files_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                cmd.with_files(file_list)
+            } else {
+                cmd
+            };
+
+            cmd.execute(&settings).await?;
+        }
+
         Commands::Tui => {
             print_error("TUI mode not yet implemented. Use 'query' command for now.");
             std::process::exit(1);
@@ -198,6 +254,22 @@ async fn execute_command(args: Args, settings: &Settings) -> study_buddy::error:
             match Settings::config_path() {
                 Ok(path) => println!("  Config:  {}", path.display()),
                 Err(_) => println!("  Config:  (none)"),
+            }
+        }
+
+        Commands::Summaries { action } => {
+            let cmd = SummariesCommand::new().with_format(args.format);
+
+            match action {
+                SummariesCommands::List => {
+                    cmd.list(&settings).await?;
+                }
+                SummariesCommands::Current => {
+                    cmd.current(&settings).await?;
+                }
+                SummariesCommands::Cleanup { keep } => {
+                    cmd.cleanup(&settings, keep).await?;
+                }
             }
         }
     }
