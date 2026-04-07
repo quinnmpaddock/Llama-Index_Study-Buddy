@@ -164,7 +164,7 @@ impl CommunityCommand {
 
         for info in &response.communities {
             let detail = client.get_community(info.id).await?;
-            output.push_str(&format!("\n##Community {}\n\n", info.id));
+            output.push_str(&format!("\n## Community {}\n\n", info.id));
             output.push_str(&format!("**Entities:** {}\n\n", info.entity_count));
             output.push_str(&format!("{}\n\n---\n\n", detail.summary));
         }
