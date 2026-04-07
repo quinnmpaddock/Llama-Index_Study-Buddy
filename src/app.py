@@ -50,7 +50,7 @@ def load_summaries_and_entity_info():
     
     # Try versioned files first (via current.json pointer)
     if os.path.exists(current_path):
-        logger.info(f"Found current.json pointer, loading versioned summaries...")
+        logger.info("Found current.json pointer, loading versioned summaries...")
         with open(current_path, "r", encoding="utf-8") as f:
             current_info = json.load(f)
         
