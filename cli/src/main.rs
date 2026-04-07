@@ -205,7 +205,7 @@ async fn execute_command(args: Args, settings: &Settings) -> study_buddy::error:
                 .with_yes(yes);
 
             let cmd = if let Some(files_str) = files {
-                // Parse comma-separated or space-separated files
+                // Parse comma-separated files
                 let file_list: Vec<String> = files_str
                     .split(',')
                     .map(|s| s.trim().to_string())
