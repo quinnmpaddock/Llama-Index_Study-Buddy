@@ -406,13 +406,15 @@ class GraphRAGQueryEngine(CustomQueryEngine):
         """Generate an answer from a community summary based on a given query using LLM."""
         prompt = (
             f"Given the community summary: {community_summary}, "
-            f"how would you answer the following query? Query: {query}"
+            f"how would you answer the following query? Query: {query}\n\n"
+            f"IMPORTANT: Preserve all source citations [Source: ...] from the summary in your answer. "
+            f"Do not remove or modify any citation markers."
         )
         messages = [
             ChatMessage(role="system", content=prompt),
             ChatMessage(
                 role="user",
-                content="I need an answer based on the above information.",
+                content="I need an answer based on the above information. Keep all source citations intact.",
             ),
         ]
         response = self.llm.chat(messages)
@@ -424,13 +426,15 @@ class GraphRAGQueryEngine(CustomQueryEngine):
 
         prompt = (
             f"Given the community summary: {community_summary}, "
-            f"how would you answer the following query? Query: {query}"
+            f"how would you answer the following query? Query: {query}\n\n"
+            f"IMPORTANT: Preserve all source citations [Source: ...] from the summary in your answer. "
+            f"Do not remove or modify any citation markers."
         )
         messages = [
             ChatMessage(role="system", content=prompt),
             ChatMessage(
                 role="user",
-                content="I need an answer based on the above information.",
+                content="I need an answer based on the above information. Keep all source citations intact.",
             ),
         ]
         response = await self.llm.achat(messages)
@@ -439,11 +443,11 @@ class GraphRAGQueryEngine(CustomQueryEngine):
 
     def aggregate_answers(self, community_answers):
         """Aggregate individual community answers into a final, coherent response."""
-        # intermediate_text = " ".join(community_answers)
         prompt = (
-            "Combine the following intermediate answers into a final, concise response."
-            "Ensure that all source citations provided in the intermediate answers are"
-            "preserved in the final output"
+            "Combine the following intermediate answers into a final, concise response. "
+            "IMPORTANT: You MUST preserve ALL source citations [Source: ...] from the intermediate answers. "
+            "Every citation that appears in the intermediate answers must appear in the final output. "
+            "Do not remove, modify, or summarize any citation markers."
         )
         messages = [
             ChatMessage(role="system", content=prompt),
@@ -460,11 +464,11 @@ class GraphRAGQueryEngine(CustomQueryEngine):
 
     async def aaggregate_answers(self, community_answers):
         """Aggregate individual community answers into a final, coherent response."""
-        # intermediate_text = " ".join(community_answers)
         prompt = (
-            "Combine the following intermediate answers into a final, concise response."
-            "Ensure that all source citations provided in the intermediate answers are"
-            "preserved in the final output"
+            "Combine the following intermediate answers into a final, concise response. "
+            "IMPORTANT: You MUST preserve ALL source citations [Source: ...] from the intermediate answers. "
+            "Every citation that appears in the intermediate answers must appear in the final output. "
+            "Do not remove, modify, or summarize any citation markers."
         )
         messages = [
             ChatMessage(role="system", content=prompt),

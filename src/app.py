@@ -26,11 +26,72 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Constants (mirroring main.py)
-NEO4JPASSWORD = "neo4j2026"
+NEO4JPASSWORD="neo4j2026"
 NEO4J_URL = "bolt://localhost:7687"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SUMMARIES_PATH = os.path.join(BASE_DIR, "..", "summaries", "community_summaries.json")
-ENTITY_INFO_PATH = os.path.join(BASE_DIR, "..", "summaries", "entity_info.json")
+SUMMARIES_DIR = os.path.join(BASE_DIR, "..", "summaries")
+
+
+def load_summaries_and_entity_info():
+    """
+    Load community summaries and entity info from the summaries directory.
+    
+    Priority:
+    1. current.json pointer (new versioned system)
+    2. Legacy files: community_summaries.json and entity_info.json
+    
+    Returns:
+        tuple: (community_summaries dict, entity_info dict)
+    
+    Raises:
+        FileNotFoundError: If no summary files are found
+    """
+    current_path = os.path.join(SUMMARIES_DIR, "current.json")
+    
+    # Try versioned files first (via current.json pointer)
+    if os.path.exists(current_path):
+        logger.info(f"Found current.json pointer, loading versioned summaries...")
+        with open(current_path, "r", encoding="utf-8") as f:
+            current_info = json.load(f)
+        
+        version = current_info.get("version")
+        if version:
+            summary_file = os.path.join(SUMMARIES_DIR, f"community_summaries_{version}.json")
+            entity_file = os.path.join(SUMMARIES_DIR, f"entity_info_{version}.json")
+            
+            if os.path.exists(summary_file) and os.path.exists(entity_file):
+                with open(summary_file, "r", encoding="utf-8") as f:
+                    raw_summaries = json.load(f)
+                with open(entity_file, "r", encoding="utf-8") as f:
+                    entity_info = json.load(f)
+                
+                community_summaries = {int(k): v for k, v in raw_summaries.items()}
+                logger.info(f"Loaded {len(community_summaries)} community summaries from version {version}.")
+                logger.info(f"Loaded {len(entity_info)} entity mappings.")
+                return community_summaries, entity_info
+    
+    # Fall back to legacy files
+    legacy_summaries = os.path.join(SUMMARIES_DIR, "community_summaries.json")
+    legacy_entity = os.path.join(SUMMARIES_DIR, "entity_info.json")
+    
+    if os.path.exists(legacy_summaries) and os.path.exists(legacy_entity):
+        logger.info("Loading legacy summary files...")
+        with open(legacy_summaries, "r", encoding="utf-8") as f:
+            raw_summaries = json.load(f)
+        with open(legacy_entity, "r", encoding="utf-8") as f:
+            entity_info = json.load(f)
+        
+        community_summaries = {int(k): v for k, v in raw_summaries.items()}
+        logger.info(f"Loaded {len(community_summaries)} community summaries from legacy files.")
+        logger.info(f"Loaded {len(entity_info)} entity mappings.")
+        return community_summaries, entity_info
+    
+    # No files found
+    raise FileNotFoundError(
+        f"No summary files found in {SUMMARIES_DIR}. "
+        f"Run an ingestion first using 'sb ingest <directory>' or start the API "
+        f"with an empty knowledge graph."
+    )
 
 
 # --- API Models ---
@@ -66,27 +127,7 @@ async def lifespan(app: FastAPI):
             is_chat_model=True,
         )
         # 2. Load Persisted Summaries
-        if not os.path.exists(SUMMARIES_PATH):
-            logger.error(
-                f"Summaries file not found at {SUMMARIES_PATH}. Please run main.py first."
-            )
-            raise FileNotFoundError(f"Missing {SUMMARIES_PATH}")
-
-        with open(SUMMARIES_PATH, "r", encoding="utf-8") as f:
-            raw_summaries = json.load(f)
-
-        community_summaries = {int(k): v for k, v in raw_summaries.items()}
-        logger.info(f"Loaded {len(community_summaries)} community summaries.")
-
-        if not os.path.exists(ENTITY_INFO_PATH):
-            logger.error(
-                f"Entity info file not found at {ENTITY_INFO_PATH}. Please run main.py first."
-            )
-            raise FileNotFoundError(f"Missing {ENTITY_INFO_PATH}")
-
-        with open(ENTITY_INFO_PATH, "r", encoding="utf-8") as f:
-            entity_info = json.load(f)
-        logger.info(f"Loaded {len(entity_info)} entity mappings.")
+        community_summaries, entity_info = load_summaries_and_entity_info()
 
         # 3. Initialize Store and Index
         # We pass the loaded summaries directly to the store
@@ -269,25 +310,65 @@ async def list_communities():
     summaries = app.state.community_summaries
 
     # Build community list with entity counts from entity_info
+    # entity_info maps entity_name -> [community_ids as integers]
+    # summaries has string keys for community IDs
     entity_info = app.state.entity_info
     community_entities: Dict[int, List[str]] = {}
 
     for entity_name, communities in entity_info.items():
         for comm_id in communities:
+            # comm_id is an integer from entity_info
             if comm_id not in community_entities:
                 community_entities[comm_id] = []
             community_entities[comm_id].append(entity_name)
 
     communities = [
         {
-            "id": comm_id,
-            "entity_count": len(set(community_entities.get(comm_id, []))),
-            "summary_preview": summaries.get(str(comm_id), "")[:100] + "...",
+            "id": int(comm_id_str),
+            "entity_count": len(set(community_entities.get(int(comm_id_str), []))),
+            "summary_preview": _make_summary_preview(summaries.get(comm_id_str, "")),
         }
-        for comm_id in sorted(summaries.keys(), key=int)
+        for comm_id_str in sorted(summaries.keys(), key=int)
     ]
 
     return {"communities": communities, "total": len(communities)}
+
+
+def _make_summary_preview(summary: str, max_len: int = 100) -> str:
+    """Create a meaningful preview from a community summary by stripping the intro sentence."""
+    text = summary.strip()
+    
+    # Find the end of the first sentence (first . followed by space or newline)
+    first_sentence_end = -1
+    for i, char in enumerate(text):
+        if char == ".":
+            # Check if this is the end of a sentence (followed by space, newline, or end)
+            if i + 1 >= len(text) or text[i + 1] in " \n":
+                first_sentence_end = i + 1
+                break
+    
+    # Strip the first sentence if it looks like an intro
+    if first_sentence_end > 0:
+        remaining = text[first_sentence_end:].lstrip()
+        # Only strip if there's content after the first sentence
+        if remaining:
+            text = remaining
+    
+    # Truncate to max_len
+    if len(text) <= max_len:
+        return text
+    
+    # Find a good break point (end of sentence or word boundary)
+    truncated = text[:max_len]
+    last_period = truncated.rfind(".")
+    last_space = truncated.rfind(" ")
+    
+    if last_period > max_len * 0.5:
+        text = text[: last_period + 1]
+    elif last_space > max_len * 0.5:
+        text = text[:last_space]
+    
+    return text[:max_len].strip() + "..."
 
 
 @app.get("/communities/{id}", response_model=CommunityDetail)
