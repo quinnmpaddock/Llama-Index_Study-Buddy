@@ -749,27 +749,60 @@ async def ingest_documents(
         )
 
     # Determine files to process
+    supported_extensions = {
+        ".pdf",
+        ".docx",
+        ".pptx",
+        ".html",
+        ".xlsx",
+        ".md",
+        ".csv",
+        ".txt",
+        ".json",
+    }
+
+    # Resolve the directory to its canonical absolute path
+    dir_root = dir_path.resolve()
+
     if request.files:
         files_to_process = []
         for filename in request.files:
-            file_path = dir_path / filename
-            if not file_path.exists():
+            # Reject absolute paths
+            if Path(filename).is_absolute():
                 raise HTTPException(
-                    status_code=400, detail=f"File not found: {file_path}"
+                    status_code=400,
+                    detail=f"Absolute paths are not allowed: {filename}",
                 )
-            files_to_process.append(str(file_path))
+
+            # Resolve the candidate file path
+            candidate = (dir_root / filename).resolve()
+
+            # Prevent path traversal: ensure candidate is under dir_root
+            try:
+                candidate.relative_to(dir_root)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Path traversal detected: {filename} is outside the directory",
+                )
+
+            # Validate extension
+            if candidate.suffix.lower() not in supported_extensions:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported file extension: {candidate.suffix}. "
+                    f"Supported: {', '.join(sorted(supported_extensions))}",
+                )
+
+            # Check file exists
+            if not candidate.exists():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"File not found: {candidate}",
+                )
+
+            files_to_process.append(str(candidate))
     else:
-        supported_extensions = {
-            ".pdf",
-            ".docx",
-            ".pptx",
-            ".html",
-            ".xlsx",
-            ".md",
-            ".csv",
-            ".txt",
-            ".json",
-        }
         files_to_process = [
             str(dir_path / f)
             for f in os.listdir(dir_path)
