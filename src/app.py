@@ -540,29 +540,40 @@ def run_full_ingestion(
 
         # Extract nodes from documents
         logger.info(f"Extracting nodes from {len(files_to_process)} files...")
+
+        # Group files by directory to avoid redundant ingestion
+        from pathlib import Path
+
+        dir_to_files: dict = {}
+        for file_path in files_to_process:
+            dir_path = os.path.dirname(file_path)
+            if dir_path not in dir_to_files:
+                dir_to_files[dir_path] = []
+            dir_to_files[dir_path].append(file_path)
+
         all_nodes = []
         processed_files = []
 
-        for file_path in files_to_process:
+        for dir_path, files_in_dir in dir_to_files.items():
             try:
-                logger.info(f"Processing: {file_path}")
-                nodes = ingester.ingestion(os.path.dirname(file_path))
-                # Filter to only nodes from this file
-                from pathlib import Path
+                logger.info(f"Ingesting directory: {dir_path}")
+                nodes = ingester.ingestion(dir_path)
 
-                file_nodes = [
-                    n
-                    for n in nodes
-                    if n.metadata.get("file_path", "").endswith(Path(file_path).name)
-                ]
-                all_nodes.extend(file_nodes)
-                processed_files.append(Path(file_path).name)
-                logger.info(
-                    f"Extracted {len(file_nodes)} nodes from {Path(file_path).name}"
-                )
+                # Filter nodes for each file in this directory
+                for file_path in files_in_dir:
+                    file_name = Path(file_path).name
+                    file_nodes = [
+                        n
+                        for n in nodes
+                        if n.metadata.get("file_path", "").endswith(file_name)
+                    ]
+                    all_nodes.extend(file_nodes)
+                    processed_files.append(file_name)
+                    logger.info(f"Extracted {len(file_nodes)} nodes from {file_name}")
             except Exception as e:
-                logger.warning(f"Failed to process {file_path}: {e}")
-                processed_files.append(f"{Path(file_path).name} (FAILED)")
+                logger.warning(f"Failed to process directory {dir_path}: {e}")
+                for file_path in files_in_dir:
+                    processed_files.append(f"{Path(file_path).name} (FAILED)")
 
         ingestion_status[task_id] = {
             "status": "building_knowledge_graph",
