@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Study Buddy Entrypoint Script
 # Starts Neo4j (Docker), Python backend, and launches Rust CLI
