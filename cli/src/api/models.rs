@@ -139,6 +139,8 @@ pub struct IngestResponse {
     #[serde(default)]
     pub communities_built: i32,
     pub message: String,
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 /// Ingestion task status

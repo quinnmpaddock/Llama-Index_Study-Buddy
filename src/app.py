@@ -434,6 +434,7 @@ class IngestResponse(BaseModel):
     total_relationships: int = 0
     communities_built: int = 0
     message: str
+    task_id: Optional[str] = None
 
 
 # Ingestion state tracking (for background tasks)
@@ -739,6 +740,7 @@ async def ingest_documents(
         files_processed=file_names,
         total_nodes=0,
         message=f"Ingestion started in background. {len(files_to_process)} file(s) being processed. Task ID: {task_id}",
+        task_id=task_id,
     )
 
 
