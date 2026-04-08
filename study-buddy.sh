@@ -40,12 +40,27 @@ check_port() {
     local port=$1
     local service=$2
     
-    if lsof -i:"$port" >/dev/null 2>&1; then
-        local pid=$(lsof -t -i:"$port" 2>/dev/null | head -1)
-        local process=$(ps -p "$pid" -o comm= 2>/dev/null || echo "unknown")
-        log_error "Port $port is already in use by process: $process (PID: $pid)"
-        log_error "Please stop the conflicting process before running Study Buddy."
-        return 1
+    # Try ss first (more reliable), fallback to lsof
+    if command -v ss &>/dev/null; then
+        if ss -tln 2>/dev/null | grep -q ":${port} "; then
+            log_error "Port $port ($service) is already in use."
+            log_error "Run: ss -tln | grep :${port} to identify the process."
+            return 1
+        fi
+    elif command -v lsof &>/dev/null; then
+        if lsof -i:"$port" >/dev/null 2>&1; then
+            log_error "Port $port ($service) is already in use."
+            log_error "Run: lsof -i :${port} to identify the process."
+            return 1
+        fi
+    else
+        # Fallback: try to bind to the port briefly
+        if python3 -c "import socket; s=socket.socket(); s.bind(('', $port)); s.close()" 2>/dev/null; then
+            : # Port is free
+        else
+            log_error "Port $port ($service) appears to be in use."
+            return 1
+        fi
     fi
     return 0
 }
