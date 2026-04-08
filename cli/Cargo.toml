@@ -1,0 +1,48 @@
+[package]
+name = "study-buddy"
+version = "0.1.0"
+edition = "2021"
+description = "Rust CLI for Study Buddy GraphRAG API"
+authors = ["Quinn"]
+license = "MIT"
+
+[[bin]]
+name = "sb"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# URL encoding
+urlencoding = "2"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive", "color", "suggestions", "env"] }
+
+# Configuration
+config = "0.14"
+directories = "5"
+toml = "0.8"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Output formatting
+tabled = "0.17"
+colored = "2"
+
+# Terminal detection
+is-terminal = "0.4"
+
+[dev-dependencies]
+tokio-test = "0.4"
