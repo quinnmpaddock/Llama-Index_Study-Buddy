@@ -23,6 +23,7 @@ data/dbms/
 input/
 # summary documents
 summaries/
+summaries/
 
 # Plugins (Binary jars)
 plugins/*.jar
