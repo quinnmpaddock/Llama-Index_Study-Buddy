@@ -19,6 +19,11 @@ data/dbms/
 # Assuming input data might be large or local-only, but strictness depends on you.
 # keeping 'input/' tracked for now based on your current setup.
 
+# document inputs
+input/
+# summary documents
+summaries/
+
 # Plugins (Binary jars)
 plugins/*.jar
 
