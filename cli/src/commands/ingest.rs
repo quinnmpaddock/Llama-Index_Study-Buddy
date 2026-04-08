@@ -152,6 +152,8 @@ impl IngestCommand {
             // Poll for status updates
             if let Some(id) = &task_id {
                 poll_status(&client, id, self.format).await?;
+            } else {
+                print_error("Could not extract task ID from response. Unable to poll for status updates.");
             }
         } else {
             // Immediate response (error or warning)
