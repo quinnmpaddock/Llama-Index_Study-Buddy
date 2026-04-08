@@ -660,6 +660,41 @@ def run_full_ingestion(
             json.dump(current_info, f, indent=4)
         logger.info(f"Current version updated to {timestamp}")
 
+        # Reload cached API state so endpoints reflect the new data
+        logger.info("Reloading GraphRAG engine with new summaries...")
+        try:
+            # Reuse the ingestion's graph_store which has updated data
+            new_graph_store = GraphRAGStore(
+                username="neo4j",
+                password=NEO4JPASSWORD,
+                url=NEO4J_URL,
+                community_summary=index.property_graph_store.community_summary,
+                entity_info=index.property_graph_store.entity_info,
+            )
+
+            new_index = PropertyGraphIndex.from_existing(
+                property_graph_store=new_graph_store,
+                embed_model=Settings.embed_model,
+            )
+
+            app.state.engine = GraphRAGQueryEngine(
+                graph_store=new_graph_store,
+                index=new_index,
+                llm=Settings.llm,
+            )
+
+            # Update API endpoint state
+            app.state.community_summaries = {
+                str(k): v
+                for k, v in index.property_graph_store.community_summary.items()
+            }
+            app.state.entity_info = index.property_graph_store.entity_info
+
+            logger.info("GraphRAG engine reloaded successfully.")
+        except Exception as reload_error:
+            logger.warning(f"Failed to reload engine: {reload_error}")
+            # Continue - ingestion still succeeded, just engine reload failed
+
         # Calculate stats
         total_entities = len(index.property_graph_store.entity_info)
         total_communities = len(index.property_graph_store.community_summary)
