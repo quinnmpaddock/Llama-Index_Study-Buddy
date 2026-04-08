@@ -86,13 +86,12 @@ def load_summaries_and_entity_info():
         logger.info(f"Loaded {len(entity_info)} entity mappings.")
         return community_summaries, entity_info
     
-    # No files found - return empty defaults so API can boot and accept /ingest
-    logger.warning(
+    # No files found
+    raise FileNotFoundError(
         f"No summary files found in {SUMMARIES_DIR}. "
-        f"The API will start with an empty knowledge graph. "
-        f"Run 'sb ingest <directory>' to populate it."
+        f"Run an ingestion first using 'sb ingest <directory>' or start the API "
+        f"with an empty knowledge graph."
     )
-    return {}, {}
 
 
 # --- API Models ---
