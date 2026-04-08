@@ -6,7 +6,8 @@
 # Usage: ./study-buddy.sh [--backend-only | --cli-only | --help]
 #
 
-set -e
+# Don't exit on error - we handle errors explicitly
+# set -e
 
 # --- Configuration ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -68,12 +69,22 @@ check_port() {
 check_all_ports() {
     local has_error=0
     
-    if ! check_port "$NEO4J_HTTP_PORT" "Neo4j HTTP"; then
-        has_error=1
+    # Check if Neo4j container is already running - if so, skip its port checks
+    local neo4j_running=false
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${NEO4J_CONTAINER}$"; then
+        neo4j_running=true
+        log_info "Neo4j container is already running - skipping port checks for Neo4j."
     fi
     
-    if ! check_port "$NEO4J_BOLT_PORT" "Neo4j Bolt"; then
-        has_error=1
+    # Only check Neo4j ports if container isn't running
+    if [ "$neo4j_running" = false ]; then
+        if ! check_port "$NEO4J_HTTP_PORT" "Neo4j HTTP"; then
+            has_error=1
+        fi
+        
+        if ! check_port "$NEO4J_BOLT_PORT" "Neo4j Bolt"; then
+            has_error=1
+        fi
     fi
     
     if ! check_port "$BACKEND_PORT" "Python Backend"; then
@@ -81,7 +92,7 @@ check_all_ports() {
     fi
     
     if [ $has_error -eq 1 ]; then
-        log_error "One or more required ports are in use.Aborting."
+        log_error "One or more required ports are in use. Aborting."
         exit 1
     fi
     
@@ -159,11 +170,81 @@ wait_for_neo4j() {
 check_python_venv() {
     if [ ! -d "${SCRIPT_DIR}/.venv" ]; then
         log_error "Python virtual environment not found at ${SCRIPT_DIR}/.venv"
-        echo "Please run: nix-shell (if using Nix) or:"
-        echo "  python -m venv .venv && source .venv/bin/activate && pip install -r requirements_backup.txt"
-        exit 1
+        echo ""
+        echo "Creating virtual environment..."
+        python3 -m venv "${SCRIPT_DIR}/.venv"
+        
+        if [ ! -d "${SCRIPT_DIR}/.venv" ]; then
+            log_error "Failed to create virtual environment."
+            echo "Please run: python3 -m venv .venv"
+            exit 1
+        fi
+        log_success "Virtual environment created."
     fi
     log_success "Python virtual environment found."
+    
+    # Source the venv
+    source "${SCRIPT_DIR}/.venv/bin/activate"
+    
+    # Check if we're in a nix-shell (dependencies provided by Nix)
+    if [ -n "$IN_NIX_SHELL" ]; then
+        log_success "Running inside nix-shell."
+        # Nix flake provides numpy, pandas, etc but not all deps - check and install
+        if ! python3 -c "from llama_index.node_parser.docling import DoclingNodeParser" 2>/dev/null; then
+            log_info "Installing Python dependencies..."
+            # Use minimal requirements to let pip resolve compatible versions
+            pip install -q -r "${SCRIPT_DIR}/requirements_minimal.txt" 2>&1 | tail -5
+            log_success "Dependencies installed."
+        fi
+        return 0
+    fi
+    
+    # Detect NixOS - venv won't work without nix-shell due to missing libraries
+    if [ -f "/etc/NIXOS" ]; then
+        log_warn "Running on NixOS without nix-shell."
+        log_warn "Virtual environments on NixOS require nix-shell for C libraries."
+        echo ""
+        if [ -f "${SCRIPT_DIR}/flake.nix" ]; then
+            echo "Please run inside nix develop:"
+            echo "  nix develop"
+            echo "  ./study-buddy.sh"
+        else
+            echo "Please run inside nix-shell:"
+            echo "  nix-shell"
+            echo "  ./study-buddy.sh"
+        fi
+        exit 1
+    fi
+    
+    # Check if core dependencies are installed
+    if ! python3 -c "import numpy; import llama_index" 2>/dev/null; then
+        log_warn "Core dependencies not installed."
+        log_info "Installing dependencies from requirements.txt..."
+        log_info "This may take a few minutes on first run..."
+        
+        # Use requirements.txt (without broken setuptools pin)
+        local req_file="${SCRIPT_DIR}/requirements.txt"
+        if [ ! -f "$req_file" ]; then
+            # Fallback: create from requirements_backup.txt without setuptools pin
+            grep -v "^setuptools==" "${SCRIPT_DIR}/requirements_backup.txt" > "$req_file" 2>/dev/null
+        fi
+        
+        if pip install -r "$req_file" 2>&1; then
+            log_success "Dependencies installed successfully."
+        else
+            # Check if at least core deps are available now
+            if python3 -c "import numpy; import llama_index" 2>/dev/null; then
+                log_success "Core dependencies installed (some optional packages may have failed)."
+            else
+                log_error "Failed to install core dependencies."
+                echo ""
+                echo "Try running inside nix-shell:"
+                echo "  nix-shell"
+                echo "  ./study-buddy.sh"
+                exit 1
+            fi
+        fi
+    fi
 }
 
 check_rust_binary() {
@@ -214,7 +295,8 @@ start_backend() {
 
 wait_for_backend() {
     log_info "Waiting for backend to be ready..."
-    local max_attempts=30
+    log_info "(First run may take 1-2 minutes to download embedding models)"
+    local max_attempts=120
     local attempt=0
     
     while [ $attempt -lt $max_attempts ]; do
