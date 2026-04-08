@@ -441,17 +441,46 @@ class IngestResponse(BaseModel):
 ingestion_status: Dict[str, dict] = {}
 
 
+def extract_json(text: str):
+    """
+    Extract and parse JSON from text.
+
+    First tries a fast regex match, then falls back to progressively
+    shrinking the substring from the end until valid JSON is found.
+
+    Returns parsed dict on success, None on failure.
+    """
+    # Fast path: try regex match first
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass  # Fall through to slow path
+
+    # Slow path: find first { and shrink from end
+    start = text.find("{")
+    if start == -1:
+        return None
+
+    for end in range(len(text), start, -1):
+        substring = text[start:end]
+        try:
+            return json.loads(substring)
+        except json.JSONDecodeError:
+            continue
+
+    return None
+
+
 def parse_fn(response_str: str):
     """Parse LLM response for entity/relationship extraction."""
-    json_pattern = r"\{.*\}"
-    match = re.search(json_pattern, response_str, re.DOTALL)
     entities = []
     relationships = []
-    if not match:
+    data = extract_json(response_str)
+    if not data:
         return entities, relationships
-    json_str = match.group(0)
     try:
-        data = json.loads(json_str)
         entities = [
             (
                 entity["entity_name"],
