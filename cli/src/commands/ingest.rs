@@ -264,7 +264,8 @@ fn display_files_table(files: &[IngestFileInfo]) {
         name: String,
         #[tabled(rename = "Type")]
         extension: String,
-        #[tabled(rename = "Size")]size: String,
+        #[tabled(rename = "Size")]
+        size: String,
     }
 
     let rows: Vec<FileRow> = files
