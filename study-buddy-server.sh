@@ -247,27 +247,6 @@ check_python_venv() {
     fi
 }
 
-check_rust_binary() {
-    local binary_path="${SCRIPT_DIR}/cli/target/release/sb"
-    
-    if [ ! -f "$binary_path" ]; then
-        log_warn "Rust binary not found at $binary_path"
-        log_info "Building Rust CLI..."
-        cd "${SCRIPT_DIR}/cli"
-        cargo build --release 2>&1
-        cd "$SCRIPT_DIR"
-        
-        if [ -f "$binary_path" ]; then
-            log_success "Rust CLI built successfully."
-        else
-            log_error "Failed to build Rust CLI."
-            exit 1
-        fi
-    else
-        log_success "Rust CLI binary found."
-    fi
-}
-
 start_backend() {
     log_info "Starting Python backend..."
     
@@ -306,22 +285,26 @@ wait_for_backend() {
         fi
         attempt=$((attempt + 1))
         sleep 1
+        
+        # Progress indicator every10 seconds
+        if [ $((attempt % 10)) -eq 0 ]; then
+            log_info "Still waiting... ($attempt seconds)"
+        fi
     done
     
-    log_warn "Backend health check timed out, but proceeding anyway..."
-}
-
-run_cli() {
-    log_info "Launching Study Buddy CLI..."
+    # Health check failed - backend might not be responding
+    log_error "Backend health check failed after ${max_attempts} seconds."
+    log_error "Checking if process is still running..."
     
-    cd "$SCRIPT_DIR"
+    if kill -0 "$BACKEND_PID" 2>/dev/null; then
+        log_error "Process $BACKEND_PID is running but not responding on port $BACKEND_PORT."
+        log_error "This may indicate a startup hang (e.g., Neo4j connection issue)."
+        log_error "Check the Python logs above for errors."
+    else
+        log_error "Process $BACKEND_PID has crashed."
+    fi
     
-    # Run the Rust CLI
-    "${SCRIPT_DIR}/cli/target/release/sb" "$@"
-    
-    local exit_code=$?
-    cleanup
-    exit $exit_code
+    exit 1
 }
 
 cleanup() {
@@ -341,54 +324,39 @@ trap cleanup EXIT
 
 # --- Main ---
 main() {
-    local mode="full"
-    
     # Parse arguments
     case "$1" in
-        --backend-only)
-            mode="backend"
-            ;;
-        --cli-only)
-            mode="cli";;
         --help|-h)
+            echo "Study Buddy Server - Starts Neo4j and Python backend"
+            echo ""
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --backend-only    Start Neo4j and Python backend only (no CLI)"
-            echo "  --cli-only        Run CLI only (assumes services are running)"
             echo "  --help, -h        Show this help message"
             echo ""
-            echo "Default: Start all services and run CLI"
+            echo "This script starts the backend services (Neo4j + Python API)."
+            echo "Use the 'sb' CLI tool to interact with the running backend."
+            echo ""
+            echo "Examples:"
+            echo "  $0                          # Start backend services"
+            echo "  ./sb query 'your question'  # Query the knowledge graph"
+            echo "  ./sb ingest input/          # Ingest documents"
+            echo "  ./sb tui                    # Interactive TUI mode"
             exit 0
             ;;
     esac
     
-    log_info "Study Buddy - Starting up..."
+    log_info "Study Buddy Server - Starting up..."
     
     # Pre-flight checks
     check_docker
+    check_all_ports
+    start_neo4j
+    check_python_venv
+    start_backend
     
-    if [ "$mode" == "full" ] || [ "$mode" == "backend" ]; then
-        check_all_ports
-        start_neo4j
-        check_python_venv
-        start_backend
-    fi
-    
-    if [ "$mode" == "cli" ]; then
-        check_rust_binary
-        check_python_venv
-    fi
-    
-    if [ "$mode" == "full" ] || [ "$mode" == "cli" ]; then
-        check_rust_binary
-        run_cli "$@"
-    fi
-    
-    if [ "$mode" == "backend" ]; then
-        log_success "Backend is running. Press Ctrl+C to stop."
-        wait
-    fi
+    log_success "Backend is running. Press Ctrl+C to stop."
+    wait
 }
 
 main "$@"

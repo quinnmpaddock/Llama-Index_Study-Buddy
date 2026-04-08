@@ -110,11 +110,16 @@ async def lifespan(app: FastAPI):
     """Handles startup and shutdown of the GraphRAG components."""
     logger.info("Initializing Study Buddy GraphRAG Engine...")
 
+    import time
+    start_time = time.time()
+    
     try:
         # 1. Setup Models
+        logger.info("[STARTUP] Step 1: Loading embedding model...")
         Settings.embed_model = HuggingFaceEmbedding(
             model_name="KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
         )
+        logger.info(f"[STARTUP] Step 1 complete ({time.time() - start_time:.2f}s)")
 
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
@@ -126,29 +131,41 @@ async def lifespan(app: FastAPI):
             api_key=api_key,
             is_chat_model=True,
         )
+        
         # 2. Load Persisted Summaries
+        logger.info("[STARTUP] Step 2: Loading summaries...")
         community_summaries, entity_info = load_summaries_and_entity_info()
+        logger.info(f"[STARTUP] Step 2 complete ({time.time() - start_time:.2f}s)")
 
         # 3. Initialize Store and Index
         # We pass the loaded summaries directly to the store
+        logger.info("[STARTUP] Step 3: Initializing GraphRAGStore...")
         graph_store = GraphRAGStore(
             username="neo4j",
             password=NEO4JPASSWORD,
             url=NEO4J_URL,
             community_summary=community_summaries,
             entity_info=entity_info,
+            refresh_schema=False,  # Skip schema refresh on startup - we're querying existing graph
+            create_indexes=False,   # Skip index creation - indexes should already exist
+            timeout=30.0,  # 30 second connection timeout
         )
+        logger.info(f"[STARTUP] Step 3a complete ({time.time() - start_time:.2f}s)")
 
         # Initialize PropertyGraphIndex from the existing store
         # Note: We don't need to pass nodes here as we are querying an existing graph
+        logger.info("[STARTUP] Step 3b: Creating PropertyGraphIndex.from_existing...")
         index = PropertyGraphIndex.from_existing(
             property_graph_store=graph_store, embed_model=Settings.embed_model
         )
+        logger.info(f"[STARTUP] Step 3 complete ({time.time() - start_time:.2f}s)")
 
         # 4. Initialize Query Engine
+        logger.info("[STARTUP] Step 4: Initializing QueryEngine...")
         app.state.engine = GraphRAGQueryEngine(
             graph_store=graph_store, index=index, llm=Settings.llm
         )
+        logger.info(f"[STARTUP] Step 4 complete ({time.time() - start_time:.2f}s)")
 
         # 5. Store data for API endpoints
         app.state.community_summaries = {
@@ -156,7 +173,7 @@ async def lifespan(app: FastAPI):
         }
         app.state.entity_info = entity_info
 
-        logger.info("GraphRAG Engine successfully initialized.")
+        logger.info(f"GraphRAG Engine successfully initialized in {time.time() - start_time:.2f}s")
     except Exception as e:
         logger.error(f"Failed to initialize engine: {str(e)}")
         raise e
@@ -670,6 +687,9 @@ def run_full_ingestion(
                 url=NEO4J_URL,
                 community_summary=index.property_graph_store.community_summary,
                 entity_info=index.property_graph_store.entity_info,
+                refresh_schema=False,  # Skip schema refresh - just reloading
+                create_indexes=False,  # Indexes already exist
+                timeout=30.0,
             )
 
             new_index = PropertyGraphIndex.from_existing(
