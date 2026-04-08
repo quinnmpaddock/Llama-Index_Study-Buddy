@@ -12,6 +12,7 @@ __pycache__/
 .ruff_cache/
 
 # Data & Database
+data/
 data/databases/
 data/transactions/
 data/*server_id*
