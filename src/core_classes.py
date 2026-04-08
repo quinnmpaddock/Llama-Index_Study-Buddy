@@ -445,9 +445,10 @@ class GraphRAGQueryEngine(CustomQueryEngine):
         """Aggregate individual community answers into a final, coherent response."""
         prompt = (
             "Combine the following intermediate answers into a final, concise response. "
-            "IMPORTANT: You MUST preserve ALL source citations [Source: ...] from the intermediate answers. "
-            "Every citation that appears in the intermediate answers must appear in the final output. "
-            "Do not remove, modify, or summarize any citation markers."
+            "IMPORTANT: You MUST preserve every bracketed citation token exactly as it appears "
+            + "(for example `[Source: ...]` and `[test_data0.pdf]`). "
+            + "Every citation token that appears in the intermediate answers must appear in the final output unchanged. "
+            + "Do not remove, rewrite, normalize, or summarize citation markers."
         )
         messages = [
             ChatMessage(role="system", content=prompt),
@@ -466,9 +467,10 @@ class GraphRAGQueryEngine(CustomQueryEngine):
         """Aggregate individual community answers into a final, coherent response."""
         prompt = (
             "Combine the following intermediate answers into a final, concise response. "
-            "IMPORTANT: You MUST preserve ALL source citations [Source: ...] from the intermediate answers. "
-            "Every citation that appears in the intermediate answers must appear in the final output. "
-            "Do not remove, modify, or summarize any citation markers."
+            "IMPORTANT: You MUST preserve every bracketed citation token exactly as it appears "
+            + "(for example `[Source: ...]` and `[test_data0.pdf]`). "
+            + "Every citation token that appears in the intermediate answers must appear in the final output unchanged. "
+            + "Do not remove, rewrite, normalize, or summarize citation markers."
         )
         messages = [
             ChatMessage(role="system", content=prompt),
