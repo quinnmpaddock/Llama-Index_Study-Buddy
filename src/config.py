@@ -57,7 +57,7 @@ class ServerConfig:
     """Backend server settings."""
     def __init__(self, config_dict: dict):
         self.port = int(os.environ.get("SERVER_PORT", config_dict.get("port", 8000)))
-        self.host = config_dict.get("host", "0.0.0.0")
+        self.host = config_dict.get("host", "127.0.0.1")
         self.log_level = config_dict.get("log_level", "INFO")
 
 
