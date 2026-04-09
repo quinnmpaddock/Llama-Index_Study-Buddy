@@ -336,6 +336,10 @@ start_backend() {
     
     # Start backend in background (app.py is in src/)
     cd src || exit 1
+    
+    # Set config file path (relative to script root, not src/)
+    export STUDY_BUDDY_CONFIG="${SCRIPT_DIR}/study_buddy.yaml"
+    
     python -m uvicorn app:app --host "$BACKEND_HOST" --port "$BACKEND_PORT" &
     BACKEND_PID=$!
     cd "$SCRIPT_DIR" || exit 1
