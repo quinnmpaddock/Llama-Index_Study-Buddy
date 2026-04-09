@@ -3,7 +3,7 @@
 # Study Buddy Entrypoint Script
 # Starts Neo4j (Docker), Python backend, and launches Rust CLI
 #
-# Usage: ./study-buddy-server.sh [--backend-only | --cli-only | --help]
+# Usage: ./study-buddy-server.sh [--help]
 #
 
 # Don't exit on error - we handle errors explicitly
@@ -155,8 +155,9 @@ wait_for_neo4j() {
     local attempt=0
     
     while [ $attempt -lt $max_attempts ]; do
-        if curl -s "http://localhost:${NEO4J_HTTP_PORT}" >/dev/null 2>&1; then
-            log_success "Neo4j is ready."
+        # Use /dev/tcp to check Bolt port (7687) - the port FastAPI backend connects to
+        if (echo >/dev/tcp/localhost/${NEO4J_BOLT_PORT}) 2>/dev/null; then
+            log_success "Neo4j Bolt port ${NEO4J_BOLT_PORT} is ready."
             return 0
         fi
         attempt=$((attempt + 1))

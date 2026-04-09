@@ -801,6 +801,7 @@ def run_full_ingestion(
                 for k, v in index.property_graph_store.community_summary.items()
             }
             app.state.entity_info = index.property_graph_store.entity_info
+            app.state.summaries_loaded = True  # Enable /query endpoint after successful reload
 
             logger.info("GraphRAG engine reloaded successfully.")
         except Exception as reload_error:
