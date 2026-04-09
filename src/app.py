@@ -42,9 +42,7 @@ def load_summaries_and_entity_info():
     
     Returns:
         tuple: (community_summaries dict, entity_info dict)
-    
-    Raises:
-        FileNotFoundError: If no summary files are found
+        Returns empty dicts if no files are found, allowing empty-graph startup.
     """
     current_path = os.path.join(SUMMARIES_DIR, "current.json")
     
@@ -86,12 +84,13 @@ def load_summaries_and_entity_info():
         logger.info(f"Loaded {len(entity_info)} entity mappings.")
         return community_summaries, entity_info
     
-    # No files found
-    raise FileNotFoundError(
+    # No files found - return empty dicts for empty-graph startup
+    logger.warning(
         f"No summary files found in {SUMMARIES_DIR}. "
-        f"Run an ingestion first using 'sb ingest <directory>' or start the API "
-        f"with an empty knowledge graph."
+        f"Starting with empty knowledge graph. "
+        f"Run 'sb ingest <directory>' to populate data."
     )
+    return {}, {}
 
 
 # --- API Models ---
@@ -172,8 +171,15 @@ async def lifespan(app: FastAPI):
             str(k): v for k, v in community_summaries.items()
         }
         app.state.entity_info = entity_info
+        app.state.summaries_loaded = len(community_summaries) > 0
 
-        logger.info(f"GraphRAG Engine successfully initialized in {time.time() - start_time:.2f}s")
+        if not app.state.summaries_loaded:
+            logger.warning(
+                "Started with empty knowledge graph. "
+                "Use 'sb ingest <directory>' to add data before querying."
+            )
+
+        logger.info(f"GraphRAG Engine successfully initialized in {time.time() - start_time:.2f}s)")
     except Exception as e:
         logger.error(f"Failed to initialize engine: {str(e)}")
         raise e
@@ -206,6 +212,12 @@ async def query_graph(request: QueryRequest):
     """
     if not hasattr(app.state, "engine"):
         raise HTTPException(status_code=503, detail="Engine not initialized")
+    
+    if not getattr(app.state, "summaries_loaded", False):
+        raise HTTPException(
+            status_code=503,
+            detail="No data ingested. Run 'sb ingest <directory>' first."
+        )
 
     try:
         # Update similarity_top_k if provided in request
