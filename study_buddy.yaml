@@ -1,0 +1,101 @@
+# ============================================================
+# Study Buddy Configuration File
+# ============================================================
+# 
+# This file configures all user-tunable settings for the
+# Study Buddy GraphRAG application.
+#
+# Environment variables can override any setting:
+#   - Set STUDY_BUDDY_CONFIG to use a different config file path
+#   - Set OPENAI_API_KEY for your LLM API key (required)
+#
+# ============================================================
+
+#------------------------------------------------------------
+# LLM (Large Language Model) Settings
+#------------------------------------------------------------
+# The LLM is used for entity extraction, relationship detection,
+# and answering questions about your knowledge graph.
+llm:
+  # The model identifier. Must match a model available at your API endpoint.
+  # Examples for Groq:
+  #   - meta-llama/llama-4-scout-17b-16e-instruct
+  #   - meta-llama/llama-3.3-70b-versatile
+  # Examples for OpenAI:
+  #   - gpt-4o
+  #   - gpt-4-turbo
+  model: "meta-llama/llama-4-scout-17b-16e-instruct"
+  # The API base URL. Change this if using a different provider.
+  # Groq:       https://api.groq.com/openai/v1
+  # OpenAI:     https://api.openai.com/v1
+  # Local/OC:   http://localhost:11434/v1 (Ollama)
+  # Together:   https://api.together.xyz/v1
+  api_base: "https://api.groq.com/openai/v1"
+  # API key is read from environment variable: OPENAI_API_KEY
+  # You can also set OPENAI_API_KEY in your shell or .env file.
+
+#------------------------------------------------------------
+# Embedding Model Settings
+#------------------------------------------------------------
+# Embeddings convert text into vectors for semantic search.
+# This model runs locally (downloaded on first use).
+embedding:
+  # HuggingFace model name for embeddings.
+  # Alternatives:
+  #   - BAAI/bge-small-en-v1.5 (faster, smaller)
+  #   - BAAI/bge-base-en-v1.5 (balanced)
+  #   - sentence-transformers/all-mpnet-base-v2 (larger, more accurate)
+  model: "KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
+
+#------------------------------------------------------------
+# Neo4j Database Settings
+#------------------------------------------------------------
+# Neo4j stores your knowledge graph. The app expects a running
+# Neo4j instance (Docker or native installation).
+neo4j:
+  # Bolt connection URL (protocol://host:port)
+  url: "bolt://localhost:7687"
+  # Neo4j username (default is 'neo4j')
+  username: "neo4j"
+  # Password for Neo4j authentication.
+  # NOTE: For security, consider setting NEO4J_PASSWORD environment
+  # variable instead of storing it here.
+  password: "neo4j2026"
+  # Connection timeout in seconds
+  timeout: 30
+
+#------------------------------------------------------------
+# Backend Server Settings
+#------------------------------------------------------------
+# The FastAPI backend that processes queries and manages ingestion.
+server:
+  # Port for the API server
+  port: 8000
+  # Host to bind to (0.0.0.0 for all interfaces, 127.0.0.1 for localhost only)
+  host: "0.0.0.0"
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_level: "INFO"
+
+#------------------------------------------------------------
+# Knowledge Graph Settings
+#------------------------------------------------------------
+# Settings for GraphRAG knowledge graph construction.
+graphrag:
+  # Maximum number of relationship paths extracted per chunk
+  max_paths_per_chunk: 2
+  # Prompt template file (relative to src/prompts/)
+  extraction_prompt: "kg_extract_template.txt"
+
+#------------------------------------------------------------
+# Docker Settings (for study-buddy-server.sh)
+#------------------------------------------------------------
+# These settings configure the Neo4j Docker container.
+docker:
+  # Container name
+  container_name: "neo4j-apoc-gds"
+  # Docker image to use
+  image: "neo4j:latest"
+  # HTTP port for Neo4j browser (7474 is default)
+  http_port: 7474
+  # Bolt port for database connections (7687 is default)
+  bolt_port: 7687

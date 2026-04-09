@@ -5,23 +5,59 @@
 #
 # Usage: ./study-buddy-server.sh [--help]
 #
+# Configuration: Reads from study_buddy.yaml (or STUDY_BUDDY_CONFIG env var)
+# Environment variables override config file values.
+#
 
 # Don't exit on error - we handle errors explicitly
 # set -e
 
 # --- Configuration ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${STUDY_BUDDY_CONFIG:-$SCRIPT_DIR/study_buddy.yaml}"
 
-# Neo4j container settings
-NEO4J_CONTAINER="neo4j-apoc-gds"
-NEO4J_HTTP_PORT=7474
-NEO4J_BOLT_PORT=7687
-NEO4J_AUTH="neo4j/neo4j2026"
-NEO4J_IMAGE="neo4j:latest"
+# Helper function to read YAML values (simple key: value parser)
+read_yaml_value() {
+    local file="$1"
+    local key="$2"
+    local default="$3"
+    
+    # Try to get value from YAML file (handles simple key: value and nested section.key)
+    if [[ -f "$file" ]]; then
+        local value
+        # First try direct key match
+        value=$(grep -E "^\s*${key}:" "$file" 2>/dev/null | head -1 | sed 's/.*:[[:space:]]*//' | sed 's/[[:space:]]*$//' | sed 's/^"//' | sed 's/"$//')
+        if [[ -n "$value" && "$value" != "" ]]; then
+            echo "$value"
+            return
+        fi
+    fi
+    echo "$default"
+}
 
-# Backend settings
-BACKEND_PORT=8000
-BACKEND_HOST="0.0.0.0"
+# --- Load Configuration from YAML ---
+# Docker/Neo4j settings
+NEO4J_CONTAINER=$(read_yaml_value "$CONFIG_FILE" "container_name" "neo4j-apoc-gds")
+NEO4J_HTTP_PORT=$(read_yaml_value "$CONFIG_FILE" "http_port" "7474")
+NEO4J_BOLT_PORT=$(read_yaml_value "$CONFIG_FILE" "bolt_port" "7687")
+NEO4J_IMAGE=$(read_yaml_value "$CONFIG_FILE" "image" "neo4j:latest")
+
+# Neo4j auth (username/password) - prefer env var for security
+NEO4J_USERNAME=$(read_yaml_value "$CONFIG_FILE" "username" "neo4j")
+NEO4J_PASSWORD="${NEO4J_PASSWORD:-$(read_yaml_value "$CONFIG_FILE" "password" "neo4j2026")}"
+NEO4J_AUTH="${NEO4J_USERNAME}/${NEO4J_PASSWORD}"
+
+# Backend settings  
+BACKEND_PORT=$(read_yaml_value "$CONFIG_FILE" "port" "8000")
+BACKEND_HOST=$(read_yaml_value "$CONFIG_FILE" "host" "0.0.0.0")
+
+# Allow environment variable overrides
+NEO4J_CONTAINER="${NEO4J_CONTAINER:-neo4j-apoc-gds}"
+NEO4J_HTTP_PORT="${NEO4J_HTTP_PORT:-7474}"
+NEO4J_BOLT_PORT="${NEO4J_BOLT_PORT:-7687}"
+NEO4J_IMAGE="${NEO4J_IMAGE:-neo4j:latest}"
+BACKEND_PORT="${BACKEND_PORT:-8000}"
+BACKEND_HOST="${BACKEND_HOST:-0.0.0.0}"
 
 # --- Colors for output ---
 RED='\033[0;31m'

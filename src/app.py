@@ -17,17 +17,17 @@ from pydantic import BaseModel, Field
 from core_classes import (GraphQueryResponse, GraphRAGExtractor,
                           GraphRAGQueryEngine, GraphRAGStore)
 from ingestion import DocumentIngestion
+from config import get_config, ConfigError
 
 # Load environment variables
 load_dotenv()
 
 # --- Configuration & Setup ---
-logging.basicConfig(level=logging.INFO)
+config = get_config()
+logging.basicConfig(level=config.server.log_level)
 logger = logging.getLogger(__name__)
 
-# Constants (mirroring main.py)
-NEO4JPASSWORD="neo4j2026"
-NEO4J_URL = "bolt://localhost:7687"
+# Directory constants
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUMMARIES_DIR = os.path.join(BASE_DIR, "..", "summaries")
 
@@ -193,21 +193,22 @@ async def lifespan(app: FastAPI):
     start_time = time.time()
     
     try:
-        # 1. Setup Models
+        # 1. Setup Models (using config)
         logger.info("[STARTUP] Step 1: Loading embedding model...")
+        logger.info(f"[STARTUP] Using embedding model: {config.embedding.model}")
         Settings.embed_model = HuggingFaceEmbedding(
-            model_name="KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
+            model_name=config.embedding.model
         )
         logger.info(f"[STARTUP] Step 1 complete ({time.time() - start_time:.2f}s)")
 
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
+        if not config.llm.api_key:
+            raise ConfigError("OPENAI_API_KEY environment variable is required")
 
+        logger.info(f"[STARTUP] Using LLM: {config.llm.model} @ {config.llm.api_base}")
         Settings.llm = OpenAILike(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
-            api_base="https://api.groq.com/openai/v1",
-            api_key=api_key,
+            model=config.llm.model,
+            api_base=config.llm.api_base,
+            api_key=config.llm.api_key,
             is_chat_model=True,
         )
         
@@ -219,15 +220,16 @@ async def lifespan(app: FastAPI):
         # 3. Initialize Store and Index
         # We pass the loaded summaries directly to the store
         logger.info("[STARTUP] Step 3: Initializing GraphRAGStore...")
+        logger.info(f"[STARTUP] Connecting to Neo4j at {config.neo4j.url}")
         graph_store = GraphRAGStore(
-            username="neo4j",
-            password=NEO4JPASSWORD,
-            url=NEO4J_URL,
+            username=config.neo4j.username,
+            password=config.neo4j.password,
+            url=config.neo4j.url,
             community_summary=community_summaries,
             entity_info=entity_info,
             refresh_schema=False,  # Skip schema refresh on startup - we're querying existing graph
             create_indexes=False,   # Skip index creation - indexes should already exist
-            timeout=30.0,  # 30 second connection timeout
+            timeout=config.neo4j.timeout,
         )
         logger.info(f"[STARTUP] Step 3a complete ({time.time() - start_time:.2f}s)")
 
@@ -625,9 +627,8 @@ def run_full_ingestion(
         # Initialize components
         ingester = DocumentIngestion()
 
-        # Load LLM configuration
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
+        # Use config for LLM
+        if not config.llm.api_key:
             ingestion_status[task_id] = {
                 "status": "error",
                 "error": "OPENAI_API_KEY not set",
@@ -635,9 +636,9 @@ def run_full_ingestion(
             return
 
         llm = OpenAILike(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
-            api_base="https://api.groq.com/openai/v1",
-            api_key=api_key,
+            model=config.llm.model,
+            api_base=config.llm.api_base,
+            api_key=config.llm.api_key,
             is_chat_model=True,
         )
 
@@ -931,12 +932,11 @@ async def ingest_documents(
             message="No supported files found to process",
         )
 
-    # Check for API key
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
+    # Check for API key via config
+    if not config.llm.api_key:
         raise HTTPException(
             status_code=500,
-            detail="OPENAI_API_KEY environment variable not set. Please set it in .env file.",
+            detail="OPENAI_API_KEY environment variable not set. Please set it in your shell or .env file.",
         )
 
     # Generate task ID and start background processing

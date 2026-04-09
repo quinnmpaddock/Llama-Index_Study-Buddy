@@ -4,71 +4,48 @@ import os
 import re
 
 import pandas as pd
+from dotenv import load_dotenv
 from llama_index.core import Document, PropertyGraphIndex, Settings
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
 from llama_index.llms.openai_like import OpenAILike
 
+from config import get_config
 from core_classes import GraphRAGExtractor, GraphRAGStore
 from ingestion import DocumentIngestion
 
-NEO4JPASSWORD = "neo4j2026"
+# Load environment variables
+load_dotenv()
+
+# Load configuration
+config = get_config()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-print("Setup local embedding model ...")
-# setup local embedding model (called in classes)
-Settings.embed_model = HuggingFaceEmbedding(
-    model_name="KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
-)
-Settings.llm = OpenAILike(
-    model="meta-llama/llama-4-scout-17b-16e-instruct",
-    api_base="https://api.groq.com/openai/v1",
-    api_key=os.environ["OPENAI_API_KEY"],
-    is_chat_model=True,
-)
-# print("Setup logging ...")
-# setup logging
-logging.basicConfig(level=logging.INFO)
+# Setup logging
+logging.basicConfig(level=config.server.log_level)
 logger = logging.getLogger(__name__)
 
-# TEMP - specify the test data location
-# news = pd.read_csv("input/csv/news_articles.csv")
-# news.head()
-# input_file = "news_articles.csv"
-# input_path = os.path.join(BASE_DIR, "..", "input", "csv", input_file)
-# data_csv = pd.read_csv(input_path, nrows=516)
-# data_csv.head()
-input_path = os.path.join(BASE_DIR, "..", "input")
-
-# input csv => array
-# documents = [
-#     Document(text=f"{row['title']}: {row['text']}", metadata={"title": row["title"]})
-#     for i, row in data_csv.iterrows()
-# ]
-#
-# splitter = SentenceSplitter(
-#     chunk_size=1024,
-#     chunk_overlap=20,
-# )
-
-# print("Extract nodes from documents ...")
-# nodes = splitter.get_nodes_from_documents(documents)
-# # source llm
-
-llm = OpenAILike(
-    model="meta-llama/llama-4-scout-17b-16e-instruct",
-    api_base="https://api.groq.com/openai/v1",
-    api_key=os.environ["OPENAI_API_KEY"],
-    is_chat_model=True,
-    # CHANGE THIS!! UNSAFE!!
-    # api_key="",
+# Setup models using config
+print(f"Loading embedding model: {config.embedding.model}")
+Settings.embed_model = HuggingFaceEmbedding(
+    model_name=config.embedding.model
 )
-# print("LLM called!")
 
-# test llm connection
-# response = llm.complete("Explain the importance of low latency LLMs")
-# print(response)
+if not config.llm.api_key:
+    raise ValueError("OPENAI_API_KEY environment variable is required")
+
+print(f"Using LLM: {config.llm.model} @ {config.llm.api_base}")
+Settings.llm = OpenAILike(
+    model=config.llm.model,
+    api_base=config.llm.api_base,
+    api_key=config.llm.api_key,
+    is_chat_model=True,
+)
+
+llm = Settings.llm
+
+input_path = os.path.join(BASE_DIR, "..", "input")
 
 template_loc = "prompts"
 template_fileName = "kg_extract_template.txt"
@@ -127,8 +104,11 @@ def main():
         )
 
     print("Connecting to Neo4j ...")
+    print(f"Connecting to {config.neo4j.url} as {config.neo4j.username}")
     graph_store = GraphRAGStore(
-        username="neo4j", password=NEO4JPASSWORD, url="bolt://localhost:7687"
+        username=config.neo4j.username,
+        password=config.neo4j.password,
+        url=config.neo4j.url,
     )
     documents = [
         Document(
