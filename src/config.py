@@ -122,9 +122,12 @@ class Config:
                 config = yaml.safe_load(f) or {}
             logger.info(f"Loaded configuration from {self.config_path}")
             return config
-        except Exception as e:
-            logger.error(f"Failed to load config file: {e}")
-            return {}
+        except yaml.YAMLError as e:
+            logger.error(f"YAML parsing error in {self.config_path}: {e}")
+            raise ConfigError(f"Invalid YAML in config file {self.config_path}: {e}")
+        except OSError as e:
+            logger.error(f"Failed to read config file {self.config_path}: {e}")
+            raise ConfigError(f"Cannot read config file {self.config_path}: {e}")
     
     def _parse_simple_yaml(self, filepath: Path) -> dict:
         """
@@ -162,8 +165,9 @@ class Config:
                             key = key.strip()
                             value = value.strip().strip('"').strip("'")
                             config[current_section][key] = value
-        except Exception as e:
-            logger.error(f"Failed to parse config file: {e}")
+        except OSError as e:
+            logger.error(f"Failed to parse config file {filepath}: {e}")
+            raise ConfigError(f"Cannot read config file {filepath}: {e}")
         
         return config
     
