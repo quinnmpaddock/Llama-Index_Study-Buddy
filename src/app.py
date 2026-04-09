@@ -711,9 +711,9 @@ def run_full_ingestion(
         logger.info("Connecting to Neo4j...")
 
         graph_store = GraphRAGStore(
-            username="neo4j",
-            password=NEO4JPASSWORD,
-            url=NEO4J_URL,
+            username=config.neo4j.username,
+            password=config.neo4j.password,
+            url=config.neo4j.url,
         )
 
         # Build property graph index
@@ -775,14 +775,14 @@ def run_full_ingestion(
         try:
             # Reuse the ingestion's graph_store which has updated data
             new_graph_store = GraphRAGStore(
-                username="neo4j",
-                password=NEO4JPASSWORD,
-                url=NEO4J_URL,
+                username=config.neo4j.username,
+                password=config.neo4j.password,
+                url=config.neo4j.url,
                 community_summary=index.property_graph_store.community_summary,
                 entity_info=index.property_graph_store.entity_info,
                 refresh_schema=False,  # Skip schema refresh - just reloading
                 create_indexes=False,  # Indexes already exist
-                timeout=30.0,
+                timeout=config.neo4j.timeout,
             )
 
             new_index = PropertyGraphIndex.from_existing(
