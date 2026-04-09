@@ -1,0 +1,17 @@
+# Core dependencies - versions resolved by pip
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+neo4j
+llama-index
+llama-index-core
+llama-index-embeddings-huggingface
+llama-index-llms-openai-like
+llama-index-graph-stores-neo4j
+llama-index-readers-docling
+llama-index-node-parser-docling
+llama-index-readers-file
+sentence-transformers
+transformers
+torch

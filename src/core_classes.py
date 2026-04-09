@@ -164,6 +164,10 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         llm: Optional[LLM] = None,
         entity_info: Optional[Dict[str, Any]] = None,
         community_summary: Optional[Dict[str, Any]] = None,
+        refresh_schema: bool = True,
+        create_indexes: bool = True,
+        timeout: Optional[float] = None,
+        **kwargs,
     ) -> None:
 
         super().__init__(
@@ -171,6 +175,10 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             password=password,
             url=url,
             database=database,
+            refresh_schema=refresh_schema,
+            create_indexes=create_indexes,
+            timeout=timeout,
+            **kwargs,
         )
 
         self.llm = llm or Settings.llm

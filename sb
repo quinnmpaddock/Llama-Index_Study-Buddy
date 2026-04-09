@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Study Buddy CLI Wrapper
+# Runs the Rust CLI tool against a running backend
+#
+# Usage: ./sb <command> [args]
+#
+# Commands:
+#   query      Query the knowledge graph
+#   search     Search for entities
+#   community  Explore graph communities  
+#   ingest     Ingest documents
+#   tui        Interactive TUI mode
+#   status     Check API connection status
+#   config     Show current configuration
+#
+# Example:
+#   ./sb ingest input/
+#   ./sb query "what is machine learning?"
+#   ./sb tui
+#
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BINARY_PATH="${SCRIPT_DIR}/cli/target/release/sb"
+
+# Build binary if needed
+if [ ! -f "$BINARY_PATH" ]; then
+    echo "Building Study Buddy CLI..."
+    cd "${SCRIPT_DIR}/cli"
+    cargo build --release 2>&1
+    cd "$SCRIPT_DIR"
+    
+    if [ ! -f "$BINARY_PATH" ]; then
+        echo "Error: Failed to build CLI binary."
+        exit 1
+    fi
+fi
+
+# Run the CLI
+"$BINARY_PATH" "$@"

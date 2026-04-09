@@ -32,45 +32,123 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUMMARIES_DIR = os.path.join(BASE_DIR, "..", "summaries")
 
 
+def find_most_recent_snapshot():
+    """
+    Scan the summaries directory for the most recent complete snapshot pair.
+    
+    A complete snapshot has both:
+    - community_summaries_YYYY-MM-DD_HHMMSS.json
+    - entity_info_YYYY-MM-DD_HHMMSS.json
+    
+    Returns:
+        str or None: The version string (e.g., "2026-04-08_150308") of the most recent snapshot,
+        or None if no complete snapshot pair exists.
+    """
+    import glob
+    from datetime import datetime
+    
+    # Find all versioned files
+    entity_files = glob.glob(os.path.join(SUMMARIES_DIR, "entity_info_*.json"))
+    summary_files = glob.glob(os.path.join(SUMMARIES_DIR, "community_summaries_*.json"))
+    
+    if not entity_files or not summary_files:
+        return None
+    
+    def parse_timestamp(filepath):
+        """Extract timestamp from filename like entity_info_2026-04-08_150308.json"""
+        name = os.path.basename(filepath)
+        # Remove extension and split
+        parts = name.replace(".json", "").split("_")
+        # parts: ['entity', 'info', '2026-04-08', '150308'] or ['community', 'summaries', '2026-04-08', '150308']
+        if len(parts) >= 4:
+            date_str = parts[-2]
+            time_str = parts[-1]
+            try:
+                return datetime.strptime(f"{date_str}_{time_str}", "%Y-%m-%d_%H%M%S")
+            except ValueError:
+                return None
+        return None
+    
+    # Build sets of available versions
+    entity_versions = {}
+    for f in entity_files:
+        ts = parse_timestamp(f)
+        if ts:
+            entity_versions[ts] = f
+    
+    summary_versions = {}
+    for f in summary_files:
+        ts = parse_timestamp(f)
+        if ts:
+            summary_versions[ts] = f
+    
+    # Find matching pairs (both files exist for same timestamp)
+    common_timestamps = set(entity_versions.keys()) & set(summary_versions.keys())
+    
+    if not common_timestamps:
+        return None
+    
+    # Return the most recent
+    most_recent = max(common_timestamps)
+    version = f"{most_recent.strftime('%Y-%m-%d_%H%M%S')}"
+    return version
+
+
 def load_summaries_and_entity_info():
     """
     Load community summaries and entity info from the summaries directory.
     
     Priority:
-    1. current.json pointer (new versioned system)
-    2. Legacy files: community_summaries.json and entity_info.json
+    1. current.json pointer (explicit pin to specific version)
+    2. Most recent complete snapshot (scan for latest entity_info + community_summaries pair)
+    3. Legacy files: community_summaries.json and entity_info.json
     
     Returns:
         tuple: (community_summaries dict, entity_info dict)
-    
-    Raises:
-        FileNotFoundError: If no summary files are found
+        Returns empty dicts if no files are found, allowing empty-graph startup.
     """
     current_path = os.path.join(SUMMARIES_DIR, "current.json")
     
-    # Try versioned files first (via current.json pointer)
+    # Helper to load a versioned snapshot
+    def load_version(version, source="versioned"):
+        summary_file = os.path.join(SUMMARIES_DIR, f"community_summaries_{version}.json")
+        entity_file = os.path.join(SUMMARIES_DIR, f"entity_info_{version}.json")
+        
+        if not (os.path.exists(summary_file) and os.path.exists(entity_file)):
+            return None, None
+        
+        with open(summary_file, "r", encoding="utf-8") as f:
+            raw_summaries = json.load(f)
+        with open(entity_file, "r", encoding="utf-8") as f:
+            entity_info = json.load(f)
+        
+        community_summaries = {int(k): v for k, v in raw_summaries.items()}
+        logger.info(f"Loaded {len(community_summaries)} community summaries ({source}: {version}).")
+        logger.info(f"Loaded {len(entity_info)} entity mappings.")
+        return community_summaries, entity_info
+    
+    # 1. Try current.json (explicit pin to specific version)
     if os.path.exists(current_path):
-        logger.info("Found current.json pointer, loading versioned summaries...")
+        logger.info("Found current.json pointer...")
         with open(current_path, "r", encoding="utf-8") as f:
             current_info = json.load(f)
         
         version = current_info.get("version")
         if version:
-            summary_file = os.path.join(SUMMARIES_DIR, f"community_summaries_{version}.json")
-            entity_file = os.path.join(SUMMARIES_DIR, f"entity_info_{version}.json")
-            
-            if os.path.exists(summary_file) and os.path.exists(entity_file):
-                with open(summary_file, "r", encoding="utf-8") as f:
-                    raw_summaries = json.load(f)
-                with open(entity_file, "r", encoding="utf-8") as f:
-                    entity_info = json.load(f)
-                
-                community_summaries = {int(k): v for k, v in raw_summaries.items()}
-                logger.info(f"Loaded {len(community_summaries)} community summaries from version {version}.")
-                logger.info(f"Loaded {len(entity_info)} entity mappings.")
-                return community_summaries, entity_info
+            summaries, entities = load_version(version, source="pinned")
+            if summaries is not None:
+                return summaries, entities
+            logger.warning(f"current.json points to version {version}, but files not found. Falling back to scan.")
     
-    # Fall back to legacy files
+    # 2. Scan for most recent complete snapshot
+    most_recent_version = find_most_recent_snapshot()
+    if most_recent_version:
+        logger.info(f"Auto-detected most recent snapshot: {most_recent_version}")
+        summaries, entities = load_version(most_recent_version, source="auto-detected")
+        if summaries is not None:
+            return summaries, entities
+    
+    # 3. Fall back to legacy files
     legacy_summaries = os.path.join(SUMMARIES_DIR, "community_summaries.json")
     legacy_entity = os.path.join(SUMMARIES_DIR, "entity_info.json")
     
@@ -86,12 +164,13 @@ def load_summaries_and_entity_info():
         logger.info(f"Loaded {len(entity_info)} entity mappings.")
         return community_summaries, entity_info
     
-    # No files found
-    raise FileNotFoundError(
+    # No files found - return empty dicts for empty-graph startup
+    logger.warning(
         f"No summary files found in {SUMMARIES_DIR}. "
-        f"Run an ingestion first using 'sb ingest <directory>' or start the API "
-        f"with an empty knowledge graph."
+        f"Starting with empty knowledge graph. "
+        f"Run 'sb ingest <directory>' to populate data."
     )
+    return {}, {}
 
 
 # --- API Models ---
@@ -110,11 +189,16 @@ async def lifespan(app: FastAPI):
     """Handles startup and shutdown of the GraphRAG components."""
     logger.info("Initializing Study Buddy GraphRAG Engine...")
 
+    import time
+    start_time = time.time()
+    
     try:
         # 1. Setup Models
+        logger.info("[STARTUP] Step 1: Loading embedding model...")
         Settings.embed_model = HuggingFaceEmbedding(
             model_name="KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
         )
+        logger.info(f"[STARTUP] Step 1 complete ({time.time() - start_time:.2f}s)")
 
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
@@ -126,37 +210,56 @@ async def lifespan(app: FastAPI):
             api_key=api_key,
             is_chat_model=True,
         )
+        
         # 2. Load Persisted Summaries
+        logger.info("[STARTUP] Step 2: Loading summaries...")
         community_summaries, entity_info = load_summaries_and_entity_info()
+        logger.info(f"[STARTUP] Step 2 complete ({time.time() - start_time:.2f}s)")
 
         # 3. Initialize Store and Index
         # We pass the loaded summaries directly to the store
+        logger.info("[STARTUP] Step 3: Initializing GraphRAGStore...")
         graph_store = GraphRAGStore(
             username="neo4j",
             password=NEO4JPASSWORD,
             url=NEO4J_URL,
             community_summary=community_summaries,
             entity_info=entity_info,
+            refresh_schema=False,  # Skip schema refresh on startup - we're querying existing graph
+            create_indexes=False,   # Skip index creation - indexes should already exist
+            timeout=30.0,  # 30 second connection timeout
         )
+        logger.info(f"[STARTUP] Step 3a complete ({time.time() - start_time:.2f}s)")
 
         # Initialize PropertyGraphIndex from the existing store
         # Note: We don't need to pass nodes here as we are querying an existing graph
+        logger.info("[STARTUP] Step 3b: Creating PropertyGraphIndex.from_existing...")
         index = PropertyGraphIndex.from_existing(
             property_graph_store=graph_store, embed_model=Settings.embed_model
         )
+        logger.info(f"[STARTUP] Step 3 complete ({time.time() - start_time:.2f}s)")
 
         # 4. Initialize Query Engine
+        logger.info("[STARTUP] Step 4: Initializing QueryEngine...")
         app.state.engine = GraphRAGQueryEngine(
             graph_store=graph_store, index=index, llm=Settings.llm
         )
+        logger.info(f"[STARTUP] Step 4 complete ({time.time() - start_time:.2f}s)")
 
         # 5. Store data for API endpoints
         app.state.community_summaries = {
             str(k): v for k, v in community_summaries.items()
         }
         app.state.entity_info = entity_info
+        app.state.summaries_loaded = len(community_summaries) > 0
 
-        logger.info("GraphRAG Engine successfully initialized.")
+        if not app.state.summaries_loaded:
+            logger.warning(
+                "Started with empty knowledge graph. "
+                "Use 'sb ingest <directory>' to add data before querying."
+            )
+
+        logger.info(f"GraphRAG Engine successfully initialized in {time.time() - start_time:.2f}s)")
     except Exception as e:
         logger.error(f"Failed to initialize engine: {str(e)}")
         raise e
@@ -189,6 +292,12 @@ async def query_graph(request: QueryRequest):
     """
     if not hasattr(app.state, "engine"):
         raise HTTPException(status_code=503, detail="Engine not initialized")
+    
+    if not getattr(app.state, "summaries_loaded", False):
+        raise HTTPException(
+            status_code=503,
+            detail="No data ingested. Run 'sb ingest <directory>' first."
+        )
 
     try:
         # Update similarity_top_k if provided in request
@@ -670,6 +779,9 @@ def run_full_ingestion(
                 url=NEO4J_URL,
                 community_summary=index.property_graph_store.community_summary,
                 entity_info=index.property_graph_store.entity_info,
+                refresh_schema=False,  # Skip schema refresh - just reloading
+                create_indexes=False,  # Indexes already exist
+                timeout=30.0,
             )
 
             new_index = PropertyGraphIndex.from_existing(
@@ -689,6 +801,7 @@ def run_full_ingestion(
                 for k, v in index.property_graph_store.community_summary.items()
             }
             app.state.entity_info = index.property_graph_store.entity_info
+            app.state.summaries_loaded = True  # Enable /query endpoint after successful reload
 
             logger.info("GraphRAG engine reloaded successfully.")
         except Exception as reload_error:
