@@ -83,16 +83,17 @@ Study Buddy is a Retrieval-Augmented Generation (RAG) system that leverages **Kn
 
 ### Supported LLM Providers
 
-Study Buddy uses LlamaIndex's `OpenAILike` module, which supports any OpenAI-compatible API:
+Study Buddy uses LlamaIndex's `OpenAILike` module, which supports any OpenAI-compatible API. Switch providers by editing `study_buddy.yaml`:
 
-| Provider                | API Base URL                     | Environment Variable |
-| ----------------------- | -------------------------------- | -------------------- |
-| Groq (default)          | `https://api.groq.com/openai/v1` | `OPENAI_API_KEY`     |
-| OpenAI                  | `https://api.openai.com/v1`      | `OPENAI_API_KEY`     |
-| Ollama (local)          | `http://localhost:11434/v1`      | `OPENAI_API_KEY`     |
-| Other OpenAI-compatible | varies                           | `OPENAI_API_KEY`     |
+| Provider      | Config `api_base`                    | Model Example                         |
+| ------------- | ------------------------------------ | ------------------------------------- |
+| **Groq** (default) | `https://api.groq.com/openai/v1` | `meta-llama/llama-4-scout-17b-16e-instruct` |
+| OpenAI        | `https://api.openai.com/v1`          | `gpt-4o`, `gpt-4-turbo`              |
+| Ollama (local)| `http://localhost:11434/v1`          | `llama3.2`, `mistral`                |
+| Together AI   | `https://api.together.xyz/v1`        | `meta-llama/Llama-3-70b-chat-hf`      |
+| Any OpenAI-compatible | varies                   | varies                                |
 
-**Note:** The environment variable is named `OPENAI_API_KEY` for compatibility, but it accepts any provider's API key.
+**Note:** The environment variable `OPENAI_API_KEY` is used for all providers (the name is kept for compatibility).
 
 ### On NixOS
 
@@ -117,19 +118,23 @@ cd study-buddy
 
 ### 2. Configure Environment
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (copy from `.env.example`):
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and add your API key:
 
 ```bash
 # Required: Any OpenAI-compatible API key
-OPENAI_API_KEY=your_groq_key_here
-# Or: OPENAI_API_KEY=sk-your-openai-key
-
-# Optional: Override the default Groq endpoint (uncomment if using another provider)
-# LLM_API_BASE=https://api.openai.com/v1
-# LLM_MODEL=gpt-4
+OPENAI_API_KEY=your_api_key_here
 ```
 
-**Note:** The server currently defaults to Groq's `llama-4-scout-17b-16e-instruct` model. To use a different provider, you'll need to modify the `api_base` and `model` parameters in `src/app.py` (lines 207-212) and `src/main.py` (lines 24-29, 59-64).
+**Configuration File:** All other settings are configured via `study_buddy.yaml`. See the [Configuration](#configuration) section for details. You can:
+
+- Edit `study_buddy.yaml` directly to change LLM model, Neo4j credentials, server ports, etc.
+- Or set environment variables to override specific settings (e.g., `NEO4J_PASSWORD` for secure deployments)
 
 ### 3. Start the Backend
 
@@ -265,12 +270,15 @@ Interactive Swagger UI: http://localhost:8000/docs
 study-buddy/
 ├── sb                      # CLI wrapper script (auto-builds Rust binary)
 ├── study-buddy-server.sh   # Entry point script (Neo4j + FastAPI)
+├── study_buddy.yaml        # Main configuration file
 ├── flake.nix               # Nix development environment
 ├── requirements.txt        # Python dependencies
 ├── .env                    # Environment variables (API keys)
+├── .env.example            # Template for .env file
 │
 ├── src/
 │   ├── app.py              # FastAPI application (main backend)
+│   ├── config.py           # Configuration loader module
 │   ├── main.py             # Legacy standalone ingestion (artifact)
 │   ├── core_classes.py     # GraphRAGExtractor, GraphRAGStore, QueryEngine
 │   └── ingestion.py        # Document parsing and chunking
@@ -295,28 +303,106 @@ study-buddy/
 
 ## Configuration
 
+Study Buddy uses a YAML configuration file (`study_buddy.yaml`) for all user-tunable settings, with environment variable overrides for sensitive data.
+
+### Configuration File: `study_buddy.yaml`
+
+The main configuration file contains all settings with helpful comments:
+
+```yaml
+# LLM Settings
+llm:
+  model: "meta-llama/llama-4-scout-17b-16e-instruct"
+  api_base: "https://api.groq.com/openai/v1"
+
+# Embedding Model (runs locally)
+embedding:
+  model: "KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5"
+
+# Neo4j Database
+neo4j:
+  url: "bolt://localhost:7687"
+  username: "neo4j"
+  password: "neo4j2026"
+  timeout: 30
+
+# Backend Server
+server:
+  port: 8000
+  host: "0.0.0.0"
+  log_level: "INFO"
+
+# Docker (for study-buddy-server.sh)
+docker:
+  container_name: "neo4j-apoc-gds"
+  image: "neo4j:latest"
+```
+
+### Switching LLM Providers
+
+Edit `study_buddy.yaml` to use a different provider:
+
+**OpenAI:**
+```yaml
+llm:
+  model: "gpt-4o"
+  api_base: "https://api.openai.com/v1"
+```
+
+**Ollama (local):**
+```yaml
+llm:
+  model: "llama3.2"
+  api_base: "http://localhost:11434/v1"
+```
+
+**Together AI:**
+```yaml
+llm:
+  model: "meta-llama/Llama-3-70b-chat-hf"
+  api_base: "https://api.together.xyz/v1"
+```
+
 ### Environment Variables
 
-| Variable         | Required | Description                                  |
-| ---------------- | -------- | -------------------------------------------- |
-| `OPENAI_API_KEY` | Yes      | API key for any OpenAI-compatible provider   |
-| `LLM_API_BASE`   | No       | Override LLM API endpoint (default: Groq)    |
-| `LLM_MODEL`      | No       | Override model name (default: llama-4-scout) |
+Environment variables take precedence over config file values:
+
+| Variable              | Description                              | Overrides Config     |
+| --------------------- | ---------------------------------------- | -------------------- |
+| `OPENAI_API_KEY`      | **Required.** API key for LLM provider   | `llm.api_key`        |
+| `NEO4J_PASSWORD`      | Neo4j password (recommended for prod)   | `neo4j.password`     |
+| `SERVER_PORT`        | Backend server port                      | `server.port`        |
+| `STUDY_BUDDY_CONFIG` | Path to custom config file               | (file location)    |
+
+**Example:**
+```bash
+# Use a secure Neo4j password
+export NEO4J_PASSWORD=my-secure-password
+
+# Use a custom config file
+export STUDY_BUDDY_CONFIG=/path/to/custom_config.yaml
+```
 
 ### Neo4j Settings
 
-Default credentials (configured in `study-buddy-server.sh`):
+Default settings (in `study_buddy.yaml`):
 
-| Setting   | Value       |
-| --------- | ----------- |
-| Username  | `neo4j`     |
-| Password  | `neo4j2026` |
-| Bolt Port | `7687`      |
-| HTTP Port | `7474`      |
+| Setting | Default Value |
+|---------|---------------|
+| URL     | `bolt://localhost:7687` |
+| Username| `neo4j` |
+| Password| `neo4j2026` |
+| Timeout | `30` seconds |
+
+**Security Tip:** For production deployments, set the password via environment variable instead of storing it in the config file:
+
+```bash
+export NEO4J_PASSWORD=your-secure-password
+```
 
 ### CLI Configuration
 
-The CLI stores config in `~/.config/study-buddy/config.toml`:
+The CLI stores user preferences in `~/.config/study-buddy/config.toml`:
 
 ```toml
 [api]
@@ -326,6 +412,14 @@ timeout_seconds = 300
 [display]
 default_format = "table"
 ```
+
+### Configuration Priority
+
+Settings are loaded in this order (later overrides earlier):
+
+1. **Built-in defaults** in `src/config.py`
+2. **Config file** (`study_buddy.yaml` or `STUDY_BUDDY_CONFIG`)
+3. **Environment variables** (highest priority)
 
 ---
 
@@ -356,12 +450,31 @@ Edit `src/ingestion.py` to add new file format handlers. The `DocumentIngestion`
 
 ### Common Issues
 
+**"OPENAI_API_KEY environment variable is required"**
+
+Make sure you've created a `.env` file with your API key:
+```bash
+cp .env.example .env
+# Edit .env and add your key
+```
+
+**"Config file not found" Warning**
+
+The application will use default values if `study_buddy.yaml` is missing. To customize settings:
+```bash
+# The default config file is created automatically on first run
+# Or specify a custom config:
+export STUDY_BUDDY_CONFIG=/path/to/custom_config.yaml
+```
+
 **Port Already in Use**
 
 ```bash
 # Find what's using the port
 ss -tln | grep :8000
-# Kill the process or change the port in study-buddy-server.sh
+# Kill the process or change the port in study_buddy.yaml:
+# server:
+#   port: 8001
 ```
 
 **Neo4j Won't Start**
