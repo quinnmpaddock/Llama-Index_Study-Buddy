@@ -3,7 +3,7 @@
 # Study Buddy Entrypoint Script
 # Starts Neo4j (Docker), Python backend, and launches Rust CLI
 #
-# Usage: ./study-buddy.sh [--backend-only | --cli-only | --help]
+# Usage: ./study-buddy-server.sh [--backend-only | --cli-only | --help]
 #
 
 # Don't exit on error - we handle errors explicitly
