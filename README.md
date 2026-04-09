@@ -9,7 +9,8 @@ Study Buddy is a Retrieval-Augmented Generation (RAG) system that leverages **Kn
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          Document Ingestion                         │
-│  PDF, DOCX, MD, CSV, TXT, HTML, XLSX                                 │
+│         PDF, DOCX, PPTX, HTML, XLSX, MD, CSV, TXT, JSON             │
+│                    (via CLI or API endpoint)                         │
 └────────────────────────────────────┬────────────────────────────────┘
                                      │
                                      ▼
@@ -44,7 +45,7 @@ Study Buddy is a Retrieval-Augmented Generation (RAG) system that leverages **Kn
 
 ### Key Components
 
-- **Knowledge Graph Extraction**: Automatically identifies entities and relationships from text using LLMs (Groq/Llama-4)
+- **Knowledge Graph Extraction**: Automatically identifies entities and relationships from text using LLMs
 - **Community Detection**: Uses the Leiden algorithm to group related entities into communities for global context
 - **Hybrid Retrieval**: Combines vector similarity search with graph traversal for multi-hop reasoning
 - **Versioned Snapshots**: Community summaries and entity mappings are saved with timestamps, allowing rollback to previous states
@@ -61,15 +62,15 @@ Study Buddy is a Retrieval-Augmented Generation (RAG) system that leverages **Kn
 
 ## Tech Stack
 
-| Component       | Technology                                |
-| --------------- | ----------------------------------------- |
-| Orchestration   | LlamaIndex                                |
-| Graph Database  | Neo4j with APOC & GDS plugins             |
-| LLM             | Groq API (Llama-4-Scout)                  |
-| Embeddings      | HuggingFace (KaLM-Embedding-Multilingual) |
-| Backend API     | FastAPI (Python)                          |
-| CLI             | Rust (TUI planned)                        |
-| Development Env | Nix Flakes                                |
+| Component       | Technology                                             |
+| --------------- | ------------------------------------------------------ |
+| Orchestration   | LlamaIndex                                             |
+| Graph Database  | Neo4j with APOC & GDS plugins                          |
+| LLM             | Any OpenAI-compatible API (Groq, OpenAI, Ollama, etc.) |
+| Embeddings      | HuggingFace (KaLM-Embedding-Multilingual)              |
+| Backend API     | FastAPI (Python)                                       |
+| CLI             | Rust (TUI planned)                                     |
+| Development Env | Nix Flakes                                             |
 
 ---
 
@@ -78,7 +79,20 @@ Study Buddy is a Retrieval-Augmented Generation (RAG) system that leverages **Kn
 - **Docker**: Required for Neo4j database
 - **Python 3.12+**: For the FastAPI backend
 - **Rust (optional)**: For building the CLI from source
-- **Groq API Key**: Get one at [console.groq.com](https://console.groq.com)
+- **LLM API Key**: Any OpenAI-compatible API
+
+### Supported LLM Providers
+
+Study Buddy uses LlamaIndex's `OpenAILike` module, which supports any OpenAI-compatible API:
+
+| Provider                | API Base URL                     | Environment Variable |
+| ----------------------- | -------------------------------- | -------------------- |
+| Groq (default)          | `https://api.groq.com/openai/v1` | `OPENAI_API_KEY`     |
+| OpenAI                  | `https://api.openai.com/v1`      | `OPENAI_API_KEY`     |
+| Ollama (local)          | `http://localhost:11434/v1`      | `OPENAI_API_KEY`     |
+| Other OpenAI-compatible | varies                           | `OPENAI_API_KEY`     |
+
+**Note:** The environment variable is named `OPENAI_API_KEY` for compatibility, but it accepts any provider's API key.
 
 ### On NixOS
 
@@ -106,10 +120,16 @@ cd study-buddy
 Create a `.env` file in the project root:
 
 ```bash
-OPENAI_API_KEY=gsk_your_groq_api_key_here
+# Required: Any OpenAI-compatible API key
+OPENAI_API_KEY=your_groq_key_here
+# Or: OPENAI_API_KEY=sk-your-openai-key
+
+# Optional: Override the default Groq endpoint (uncomment if using another provider)
+# LLM_API_BASE=https://api.openai.com/v1
+# LLM_MODEL=gpt-4
 ```
 
-Note: Despite the name, this is your Groq API key. The variable name is for compatibility with OpenAI-like API clients.
+**Note:** The server currently defaults to Groq's `llama-4-scout-17b-16e-instruct` model. To use a different provider, you'll need to modify the `api_base` and `model` parameters in `src/app.py` (lines 207-212) and `src/main.py` (lines 24-29, 59-64).
 
 ### 3. Start the Backend
 
@@ -170,6 +190,10 @@ Or use the wrapper script which auto-builds:
 # Check connection status
 ./sb status
 
+# Ingest documents into the knowledge graph
+./sb ingest input/
+./sb ingest input/ --files paper.pdf,notes.md
+
 # Query the knowledge graph
 ./sb query "What is machine learning?"
 
@@ -198,6 +222,11 @@ Or use the wrapper script which auto-builds:
 # Health check
 curl http://localhost:8000/
 
+# Ingest documents
+curl -X POST http://localhost:8000/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"directory": "/path/to/documents"}'
+
 # Query the graph
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
@@ -220,19 +249,13 @@ curl http://localhost:8000/communities/42
 
 Interactive Swagger UI: http://localhost:8000/docs
 
-### Document Ingestion
+### Workflow Summary
 
-To ingest documents into the knowledge graph:
-
-```bash
-# Using main.py directly (builds new graph)
-python src/main.py
-
-# Documents go in the input/ directory
-# Supported formats: PDF, DOCX, PPTX, HTML, XLSX, MD, CSV, TXT
 ```
-
-Place your documents in the `input/` directory before running ingestion.
+1. Start backend:     ./study-buddy-server.sh
+2. Ingest documents:  ./sb ingest input/
+3. Query knowledge:   ./sb query "your question"
+```
 
 ---
 
@@ -240,7 +263,7 @@ Place your documents in the `input/` directory before running ingestion.
 
 ```
 study-buddy/
-├── sb                      # CLI wrapper script
+├── sb                      # CLI wrapper script (auto-builds Rust binary)
 ├── study-buddy-server.sh   # Entry point script (Neo4j + FastAPI)
 ├── flake.nix               # Nix development environment
 ├── requirements.txt        # Python dependencies
@@ -248,7 +271,7 @@ study-buddy/
 │
 ├── src/
 │   ├── app.py              # FastAPI application (main backend)
-│   ├── main.py             # Document ingestion script
+│   ├── main.py             # Legacy standalone ingestion (artifact)
 │   ├── core_classes.py     # GraphRAGExtractor, GraphRAGStore, QueryEngine
 │   └── ingestion.py        # Document parsing and chunking
 │
@@ -266,15 +289,19 @@ study-buddy/
 └── plugins/                # Neo4j plugins (APOC, GDS)
 ```
 
+**Note:** `src/main.py` is a legacy artifact from early development. The primary ingestion workflow is through the API (`/ingest` endpoint) or CLI (`./sb ingest`).
+
 ---
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable         | Required | Description                       |
-| ---------------- | -------- | --------------------------------- |
-| `OPENAI_API_KEY` | Yes      | Groq API key (key name is legacy) |
+| Variable         | Required | Description                                  |
+| ---------------- | -------- | -------------------------------------------- |
+| `OPENAI_API_KEY` | Yes      | API key for any OpenAI-compatible provider   |
+| `LLM_API_BASE`   | No       | Override LLM API endpoint (default: Groq)    |
+| `LLM_MODEL`      | No       | Override model name (default: llama-4-scout) |
 
 ### Neo4j Settings
 
@@ -361,8 +388,8 @@ nix develop
 This means the knowledge graph is empty. You need to ingest documents first:
 
 1. Place documents in `input/` directory
-2. Run `python src/main.py` to build the graph
-3. Restart the backend
+2. Run `./sb ingest input/` (with backend running)
+3. The API will automatically reload with new data
 
 ### Logs
 
@@ -375,19 +402,20 @@ This means the knowledge graph is empty. You need to ingest documents first:
 
 ### Endpoints
 
-| Method   | Path                         | Description                |
-| -------- | ---------------------------- | -------------------------- |
-| `GET`    | `/`                          | Health check               |
-| `POST`   | `/query`                     | Query the knowledge graph  |
-| `GET`    | `/entities`                  | Search entities            |
-| `GET`    | `/entities/{name}`           | Get entity details         |
-| `GET`    | `/communities`               | List all communities       |
-| `GET`    | `/communities/{id}`          | Get community details      |
-| `GET`    | `/communities/{id}/entities` | Get entities in community  |
-| `POST`   | `/ingest`                    | Ingest documents (planned) |
-| `GET`    | `/summaries`                 | List summary versions      |
-| `GET`    | `/summaries/current`         | Show active version        |
-| `DELETE` | `/summaries/cleanup`         | Delete old versions        |
+| Method   | Path                         | Description                           |
+| -------- | ---------------------------- | ------------------------------------- |
+| `GET`    | `/`                          | Health check                          |
+| `POST`   | `/ingest`                    | Ingest documents into knowledge graph |
+| `GET`    | `/ingest/status/{task_id}`   | Check ingestion progress              |
+| `POST`   | `/query`                     | Query the knowledge graph             |
+| `GET`    | `/entities`                  | Search entities                       |
+| `GET`    | `/entities/{name}`           | Get entity details                    |
+| `GET`    | `/communities`               | List all communities                  |
+| `GET`    | `/communities/{id}`          | Get community details                 |
+| `GET`    | `/communities/{id}/entities` | Get entities in community             |
+| `GET`    | `/summaries`                 | List summary versions                 |
+| `GET`    | `/summaries/current`         | Show active version                   |
+| `DELETE` | `/summaries/cleanup`         | Delete old versions                   |
 
 For detailed request/response schemas, see the Swagger UI at `/docs`.
 
