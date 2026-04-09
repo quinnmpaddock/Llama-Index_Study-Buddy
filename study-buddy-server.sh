@@ -250,7 +250,7 @@ check_python_venv() {
 start_backend() {
     log_info "Starting Python backend..."
     
-    cd "$SCRIPT_DIR"
+    cd "$SCRIPT_DIR" || exit 1
     
     # Source the virtual environment
     source .venv/bin/activate
@@ -261,10 +261,10 @@ start_backend() {
     fi
     
     # Start backend in background (app.py is in src/)
-    cd src
+    cd src || exit 1
     python -m uvicorn app:app --host "$BACKEND_HOST" --port "$BACKEND_PORT" &
     BACKEND_PID=$!
-    cd "$SCRIPT_DIR"
+    cd "$SCRIPT_DIR" || exit 1
     
     log_info "Backend started (PID: $BACKEND_PID)"
     
