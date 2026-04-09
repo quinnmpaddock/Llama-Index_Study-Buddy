@@ -336,6 +336,10 @@ start_backend() {
     
     # Start backend in background (app.py is in src/)
     cd src || exit 1
+    
+    # Preserve caller/.env override; otherwise use resolved default from script root
+    export STUDY_BUDDY_CONFIG="${STUDY_BUDDY_CONFIG:-$CONFIG_FILE}"
+    
     python -m uvicorn app:app --host "$BACKEND_HOST" --port "$BACKEND_PORT" &
     BACKEND_PID=$!
     cd "$SCRIPT_DIR" || exit 1
