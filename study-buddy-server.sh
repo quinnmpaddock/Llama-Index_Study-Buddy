@@ -223,8 +223,12 @@ check_python_venv() {
         if ! python3 -c "from llama_index.node_parser.docling import DoclingNodeParser" 2>/dev/null; then
             log_info "Installing Python dependencies..."
             # Use minimal requirements to let pip resolve compatible versions
-            pip install -q -r "${SCRIPT_DIR}/requirements_minimal.txt" 2>&1 | tail -5
-            log_success "Dependencies installed."
+            if pip install -q -r "${SCRIPT_DIR}/requirements_minimal.txt"; then
+                log_success "Dependencies installed."
+            else
+                log_error "Failed to install Python dependencies from requirements_minimal.txt"
+                exit 1
+            fi
         fi
         return 0
     fi
