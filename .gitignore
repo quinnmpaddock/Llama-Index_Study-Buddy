@@ -38,3 +38,7 @@ node_modules/
 .opencode
 *hermes_conversation*
 
+# old requirements stuff
+requirements.txt.old
+requirements_backup.txt
+requirements_pinned.txt
