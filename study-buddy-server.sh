@@ -26,7 +26,8 @@ read_yaml_value() {
     if [[ -f "$file" ]]; then
         local value
         # First try direct key match
-        value=$(grep -E "^\s*${key}:" "$file" 2>/dev/null | head -1 | sed 's/.*:[[:space:]]*//' | sed 's/[[:space:]]*$//' | sed 's/^"//' | sed 's/"$//')
+        # Match line starting with optional whitespace + key + colon, then extract everything after
+        value=$(grep -E "^\s*${key}:" "$file" 2>/dev/null | head -1 | sed 's/[^:]*:[[:space:]]*//' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | sed 's/^"//' | sed 's/"$//')
         if [[ -n "$value" && "$value" != "" ]]; then
             echo "$value"
             return
