@@ -289,7 +289,7 @@ wait_for_backend() {
         attempt=$((attempt + 1))
         sleep 1
         
-        # Progress indicator every10 seconds
+        # Progress indicator every 10 seconds
         if [ $((attempt % 10)) -eq 0 ]; then
             log_info "Still waiting... ($attempt seconds)"
         fi
