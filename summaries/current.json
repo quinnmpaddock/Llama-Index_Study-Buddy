@@ -1,12 +1,12 @@
 {
-    "version": "2026-04-08_150308",
-    "created_at": "2026-04-08T15:03:08.380535",
+    "version": "2026-04-09_103411",
+    "created_at": "2026-04-09T10:34:11.061436",
     "files": {
-        "community_summaries": "community_summaries_2026-04-08_150308.json",
-        "entity_info": "entity_info_2026-04-08_150308.json"
+        "community_summaries": "community_summaries_2026-04-09_103411.json",
+        "entity_info": "entity_info_2026-04-09_103411.json"
     },
     "stats": {
-        "total_entities": 1445,
-        "total_communities": 283
+        "total_entities": 203,
+        "total_communities": 29
     }
 }

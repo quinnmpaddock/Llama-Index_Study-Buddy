@@ -23,7 +23,6 @@ data/dbms/
 input/
 # summary documents
 summaries/
-summaries/
 
 # Plugins (Binary jars)
 plugins/*.jar
@@ -42,3 +41,5 @@ node_modules/
 requirements.txt.old
 requirements_backup.txt
 requirements_pinned.txt
+
+data_old/

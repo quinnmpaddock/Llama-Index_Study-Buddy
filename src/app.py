@@ -714,6 +714,8 @@ def run_full_ingestion(
             username=config.neo4j.username,
             password=config.neo4j.password,
             url=config.neo4j.url,
+            refresh_schema=False,  # Skip slow schema refresh during ingestion
+            create_indexes=True,   # Ensure indexes exist (idempotent)
             timeout=config.neo4j.timeout,
         )
 
