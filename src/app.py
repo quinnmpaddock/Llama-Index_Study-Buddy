@@ -714,6 +714,7 @@ def run_full_ingestion(
             username=config.neo4j.username,
             password=config.neo4j.password,
             url=config.neo4j.url,
+            timeout=config.neo4j.timeout,
         )
 
         # Build property graph index
