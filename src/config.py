@@ -187,6 +187,7 @@ class Config:
         self.server = ServerConfig(self._raw_config.get("server", {}))
         self.graphrag = GraphRAGConfig(self._raw_config.get("graphrag", {}))
         self.docker = DockerConfig(self._raw_config.get("docker", {}))
+        self._validate()
     
     @classmethod
     def get(cls) -> 'Config':
