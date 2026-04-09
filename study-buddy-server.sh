@@ -183,8 +183,38 @@ check_python_venv() {
     fi
     log_success "Python virtual environment found."
     
+    # Verify activation file exists and is readable
+    local activate_script="${SCRIPT_DIR}/.venv/bin/activate"
+    if [ ! -f "$activate_script" ]; then
+        log_error "Activation script not found: $activate_script"
+        log_error "The .venv directory exists but appears corrupted or incomplete."
+        echo "Please remove and recreate: rm -rf .venv && python3 -m venv .venv"
+        exit 1
+    fi
+    
+    if [ ! -r "$activate_script" ]; then
+        log_error "Activation script not readable: $activate_script"
+        log_error "Check file permissions."
+        exit 1
+    fi
+    
     # Source the venv
-    source "${SCRIPT_DIR}/.venv/bin/activate"
+    if ! source "$activate_script"; then
+        log_error "Failed to activate virtual environment: $activate_script"
+        exit 1
+    fi
+    
+    # Verify activation succeeded by checking VIRTUAL_ENV
+    if [ -z "$VIRTUAL_ENV" ]; then
+        log_error "Virtual environment activation failed - VIRTUAL_ENV not set."
+        log_error "Activation script: $activate_script"
+        echo ""
+        echo "This may indicate a corrupted venv or shell incompatibility."
+        echo "Try recreating: rm -rf .venv && python3 -m venv .venv"
+        exit 1
+    fi
+    
+    log_success "Virtual environment activated: $VIRTUAL_ENV"
     
     # Check if we're in a nix-shell (dependencies provided by Nix)
     if [ -n "$IN_NIX_SHELL" ]; then
