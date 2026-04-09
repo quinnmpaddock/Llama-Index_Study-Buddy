@@ -32,13 +32,76 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUMMARIES_DIR = os.path.join(BASE_DIR, "..", "summaries")
 
 
+def find_most_recent_snapshot():
+    """
+    Scan the summaries directory for the most recent complete snapshot pair.
+    
+    A complete snapshot has both:
+    - community_summaries_YYYY-MM-DD_HHMMSS.json
+    - entity_info_YYYY-MM-DD_HHMMSS.json
+    
+    Returns:
+        str or None: The version string (e.g., "2026-04-08_150308") of the most recent snapshot,
+        or None if no complete snapshot pair exists.
+    """
+    import glob
+    from datetime import datetime
+    
+    # Find all versioned files
+    entity_files = glob.glob(os.path.join(SUMMARIES_DIR, "entity_info_*.json"))
+    summary_files = glob.glob(os.path.join(SUMMARIES_DIR, "community_summaries_*.json"))
+    
+    if not entity_files or not summary_files:
+        return None
+    
+    def parse_timestamp(filepath):
+        """Extract timestamp from filename like entity_info_2026-04-08_150308.json"""
+        name = os.path.basename(filepath)
+        # Remove extension and split
+        parts = name.replace(".json", "").split("_")
+        # parts: ['entity', 'info', '2026-04-08', '150308'] or ['community', 'summaries', '2026-04-08', '150308']
+        if len(parts) >= 4:
+            date_str = parts[-2]
+            time_str = parts[-1]
+            try:
+                return datetime.strptime(f"{date_str}_{time_str}", "%Y-%m-%d_%H%M%S")
+            except ValueError:
+                return None
+        return None
+    
+    # Build sets of available versions
+    entity_versions = {}
+    for f in entity_files:
+        ts = parse_timestamp(f)
+        if ts:
+            entity_versions[ts] = f
+    
+    summary_versions = {}
+    for f in summary_files:
+        ts = parse_timestamp(f)
+        if ts:
+            summary_versions[ts] = f
+    
+    # Find matching pairs (both files exist for same timestamp)
+    common_timestamps = set(entity_versions.keys()) & set(summary_versions.keys())
+    
+    if not common_timestamps:
+        return None
+    
+    # Return the most recent
+    most_recent = max(common_timestamps)
+    version = f"{most_recent.strftime('%Y-%m-%d_%H%M%S')}"
+    return version
+
+
 def load_summaries_and_entity_info():
     """
     Load community summaries and entity info from the summaries directory.
     
     Priority:
-    1. current.json pointer (new versioned system)
-    2. Legacy files: community_summaries.json and entity_info.json
+    1. current.json pointer (explicit pin to specific version)
+    2. Most recent complete snapshot (scan for latest entity_info + community_summaries pair)
+    3. Legacy files: community_summaries.json and entity_info.json
     
     Returns:
         tuple: (community_summaries dict, entity_info dict)
@@ -46,29 +109,46 @@ def load_summaries_and_entity_info():
     """
     current_path = os.path.join(SUMMARIES_DIR, "current.json")
     
-    # Try versioned files first (via current.json pointer)
+    # Helper to load a versioned snapshot
+    def load_version(version, source="versioned"):
+        summary_file = os.path.join(SUMMARIES_DIR, f"community_summaries_{version}.json")
+        entity_file = os.path.join(SUMMARIES_DIR, f"entity_info_{version}.json")
+        
+        if not (os.path.exists(summary_file) and os.path.exists(entity_file)):
+            return None, None
+        
+        with open(summary_file, "r", encoding="utf-8") as f:
+            raw_summaries = json.load(f)
+        with open(entity_file, "r", encoding="utf-8") as f:
+            entity_info = json.load(f)
+        
+        community_summaries = {int(k): v for k, v in raw_summaries.items()}
+        logger.info(f"Loaded {len(community_summaries)} community summaries ({source}: {version}).")
+        logger.info(f"Loaded {len(entity_info)} entity mappings.")
+        return community_summaries, entity_info
+    
+    # 1. Try current.json (explicit pin to specific version)
     if os.path.exists(current_path):
-        logger.info("Found current.json pointer, loading versioned summaries...")
+        logger.info("Found current.json pointer...")
         with open(current_path, "r", encoding="utf-8") as f:
             current_info = json.load(f)
         
         version = current_info.get("version")
         if version:
-            summary_file = os.path.join(SUMMARIES_DIR, f"community_summaries_{version}.json")
-            entity_file = os.path.join(SUMMARIES_DIR, f"entity_info_{version}.json")
-            
-            if os.path.exists(summary_file) and os.path.exists(entity_file):
-                with open(summary_file, "r", encoding="utf-8") as f:
-                    raw_summaries = json.load(f)
-                with open(entity_file, "r", encoding="utf-8") as f:
-                    entity_info = json.load(f)
-                
-                community_summaries = {int(k): v for k, v in raw_summaries.items()}
-                logger.info(f"Loaded {len(community_summaries)} community summaries from version {version}.")
-                logger.info(f"Loaded {len(entity_info)} entity mappings.")
-                return community_summaries, entity_info
+            summaries, entities = load_version(version, source="pinned")
+            if summaries is not None:
+                return summaries, entities
+            logger.warning(f"current.json points to version {version}, but files not found. Falling back to scan.")
     
-    # Fall back to legacy files
+    # 2. Scan for most recent complete snapshot
+    most_recent_version = find_most_recent_snapshot()
+    if most_recent_version:
+        logger.info(f"Auto-detected most recent snapshot: {most_recent_version}")
+        summaries, entities = load_version(most_recent_version, source="auto-detected")
+        if summaries is not None:
+            return summaries, entities
+    
+    # 3. Fall back to legacy files
     legacy_summaries = os.path.join(SUMMARIES_DIR, "community_summaries.json")
     legacy_entity = os.path.join(SUMMARIES_DIR, "entity_info.json")
     
