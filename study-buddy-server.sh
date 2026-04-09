@@ -256,8 +256,11 @@ start_backend() {
     source .venv/bin/activate
     
     # Load environment variables from .env
+    # Load environment variables from .env
     if [ -f .env ]; then
-        export $(grep -v '^#' .env | xargs)
+        set -a
+        source .env
+        set +a
     fi
     
     # Start backend in background (app.py is in src/)
