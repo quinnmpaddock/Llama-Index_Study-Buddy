@@ -61,8 +61,9 @@ neo4j:
   # NOTE: For security, consider setting NEO4J_PASSWORD environment
   # variable instead of storing it here.
   password: "neo4j2026"
-  # Connection timeout in seconds
-  timeout: 30
+  # Query timeout in seconds (for long-running Cypher queries)
+  # Default: 120 seconds (2 minutes) - handles large graph operations
+  timeout: 120
 
 #------------------------------------------------------------
 # Backend Server Settings
