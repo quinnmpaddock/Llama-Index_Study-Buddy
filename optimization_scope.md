@@ -3,6 +3,8 @@
 > **Purpose:** Reference document for agentic optimization of the study-buddy codebase. Each section identifies specific issues with file/line references, explains the risk or impact, and suggests concrete fixes.
 >
 > **Context:** This application is designed to run locally without internet exposure. Security concerns related to remote attackers (API auth, CORS, rate limiting) are deprioritized. The focus is on **code correctness, reliability, performance, and developer experience**. Only genuine code-safety issues (like path traversal that could corrupt data) are highlighted.
+>
+> **LlamaIndex Version Notes (v0.12.x):** `PropertyGraphIndex.from_existing()` is valid and stable. `TransformComponent.__call__()` is the canonical sync entry point — `PropertyGraphIndex._insert()` calls `__call__()` synchronously. `Settings` is a Pydantic V2 singleton with **no thread safety** (no locks, no mutex). `Neo4jPropertyGraphStore` is **sync-only** — no async method variants exist. The underlying `neo4j` Python driver does have async support via `AsyncGraphDatabase`, but LlamaIndex doesn't use it.
 
 ---
 
@@ -36,7 +38,21 @@ RuntimeError: This event loop is already running
 
 This is a hard crash — ingestion will fail. The `__call__` method is the sync entry point that LlamaIndex's `PropertyGraphIndex` uses internally.
 
-**Fix:** Detect the running loop and schedule the coroutine properly:
+**Fix (recommended — simplest):** Use `nest_asyncio` to allow `asyncio.run()` inside an existing event loop:
+
+```python
+# At application startup (e.g., in lifespan or module-level):
+import nest_asyncio
+nest_asyncio.apply()
+
+# Then the existing __call__ works as-is:
+def __call__(self, nodes, show_progress=False, **kwargs):
+    return asyncio.run(self.acall(nodes, show_progress=show_progress, **kwargs))
+```
+
+`nest_asyncio` patches the event loop to allow nested `asyncio.run()` calls. This is what LlamaIndex's own async utilities use internally.
+
+**Fix (alternative — no dependency):** Detect the running loop and use a ThreadPoolExecutor:
 
 ```python
 def __call__(self, nodes, show_progress=False, **kwargs):
@@ -46,7 +62,6 @@ def __call__(self, nodes, show_progress=False, **kwargs):
         loop = None
 
     if loop and loop.is_running():
-        # We're inside an existing event loop — schedule and wait
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor() as pool:
             future = pool.submit(asyncio.run, self.acall(nodes, show_progress=show_progress, **kwargs))
@@ -55,7 +70,7 @@ def __call__(self, nodes, show_progress=False, **kwargs):
         return asyncio.run(self.acall(nodes, show_progress=show_progress, **kwargs))
 ```
 
-Or better, ensure ingestion always calls the async path directly via `await extractor.acall(...)`.
+**Best fix:** Ensure ingestion always calls the async path directly via `await extractor.acall(...)`, making `__call__` unnecessary. This avoids the nested event loop problem entirely.
 
 ### 1.2 Race Condition: Engine State Swap During Queries — **P0 CRITICAL**
 
@@ -71,6 +86,8 @@ app.state.summaries_loaded = True
 ```
 
 A concurrent query could read partially-updated state — e.g., new `community_summaries` but old `entity_info` — producing incorrect results or a crash.
+
+**Note:** `Settings` (LlamaIndex's global config singleton) has **no thread safety** — no locks, no mutex. If ingestion and queries mutate `Settings` concurrently (e.g., `Settings.embed_model`), that's an additional data race. Current code sets `Settings` at startup only, which is safe.
 
 **Fix:** Build the complete state first, then swap atomically:
 
@@ -91,22 +108,33 @@ Even better, wrap the swap + all reads in an `asyncio.Lock`.
 
 ### 1.3 Bare `except Exception` Silences `build_communities` Failures — **P0 HIGH**
 
-**File:** `src/core_classes.py:263`
+**File:** `src/core_classes.py:263–271`
 
 ```python
-except Exception as e:
-    print(f"DEBUG: build_communities failed: {type(e).__name__}: {e}")
+        except Exception as e:
+            print(f"DEBUG: build_communities failed: {type(e).__name__}: {e}")
+        finally:
+            # drop graph projection
+            self._run_cypher(
+                f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
+            )
+        self._collect_community_info()  # ← runs even after failure!
 ```
 
-This catches **all** exceptions from the Leiden algorithm + graph projection, then silently continues to `_collect_community_info()` which will likely fail on corrupted/missing graph state. The result is either empty communities or a confusing downstream error.
+This catches **all** exceptions from the Leiden algorithm + graph projection, then silently continues. Crucially, `_collect_community_info()` on line 271 is **outside** the try/except/finally block — so it runs even after `build_communities` fails and the graph projection has been dropped. The result is either empty communities or a confusing Neo4j error querying a non-existent graph.
 
-**Fix:** Log the error properly and propagate or handle gracefully:
+**Fix:** Move `_collect_community_info()` inside the try block, after the Leiden call:
 
 ```python
+try:
+    self._run_cypher(...)  # project
+    self._run_cypher(...)  # leiden
+    self._collect_community_info()  # only if projection succeeded
 except Exception as e:
     logger.error(f"build_communities failed: {type(e).__name__}: {e}")
-    # Don't collect community info if the graph projection failed
-    return
+    # Don't collect community info — the projection failed
+finally:
+    self._run_cypher(f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName")
 ```
 
 ### 1.4 Hardcoded Neo4j Password in Committed Config — **P1 MEDIUM**
@@ -140,16 +168,16 @@ except ValueError as e:
 
 Network errors, rate limits, timeouts, and API errors from LlamaIndex all inherit from different exception classes. Only `ValueError` is caught — everything else propagates as an unhandled exception that crashes the entire extraction loop, losing all entities from that chunk.
 
-**Fix:** Catch broader categories with proper logging:
+**Fix:** Catch `Exception` broadly with proper logging, and optionally add retry for transient errors:
 
 ```python
-except (ValueError, asyncio.TimeoutError, Exception) as e:
+except Exception as e:
     logger.warning(f"LLM extraction failed for node: {type(e).__name__}: {e}")
     entities = []
     entities_relationship = []
 ```
 
-Or better, use `tenacity` for retry with backoff on transient errors.
+Or better, use `tenacity` for retry with backoff on transient errors only (see §4.3).
 
 ---
 
@@ -171,21 +199,29 @@ These block the FastAPI event loop during queries. Async variants already exist 
 
 **Fix:** Ensure all query paths use the async variants. Wrap any remaining sync calls in `asyncio.to_thread()`.
 
-### 2.2 Sequential Cypher Queries in `build_communities` — **P2 MEDIUM**
+### 2.2 GDS Cypher Queries Cannot Be Batched — **P2 MEDIUM**
 
 **File:** `src/core_classes.py:235–270`
 
-Three separate Cypher queries execute sequentially (project, leiden, drop). Each is a separate network round-trip to Neo4j.
+Three separate Cypher queries execute sequentially (project, leiden, drop). Each uses `_run_cypher()` which calls `driver.execute_query()`, auto-managing sessions and transactions.
 
-**Fix:** Wrap the project + leiden in a single transaction:
+**This is correct and cannot be batched.** GDS operations have ordering constraints:
+- `gds.graph.project` must commit before `gds.leiden.write` can reference the projected graph
+- `gds.leiden.write` must commit before `gds.graph.drop` can clean up
+- `execute_query()` auto-commits after each call, which is the right behavior
+
+The sequential execution is necessary. The current code is correct.
+
+**Actual optimization opportunity:** The `_run_cypher` method (line 213–220) uses `execute_query()` which creates a new session per call. For the three GDS calls, you could use a single `session` with explicit transactions to reduce session overhead, but the GDS ordering constraint means you still need three separate transactions.
+
+**Minor fix:** Add error handling around the `gds.graph.drop` in the `finally` block (line 268) — if the projection was never created (project failed on the first line), the drop will also fail:
 
 ```python
-def build_communities(self):
-    with self._driver.session() as session:
-        session.run("MATCH (n:__Entity__)-[r]->(m:__Entity__) ...")
-        session.run("CALL gds.leiden.write(...) ...")
-    # Drop must be separate (after commit)
-    self._run_cypher(f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName")
+finally:
+    try:
+        self._run_cypher(f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName")
+    except Exception:
+        pass  # Graph may not exist if projection failed
 ```
 
 ### 2.3 Community Entity Lookup Is O(n×m) Per Request — **P2 MEDIUM**
@@ -311,7 +347,7 @@ Five `print()` statements mixed with proper `logger` calls in `app.py`. When run
 
 | Issue | Location | Fix |
 |---|---|---|
-| Bare `except Exception` in `build_communities` | `core_classes.py:263` | Log + return/raise (see §1.3) |
+| Bare `except Exception` in `build_communities` | `core_classes.py:263` | Move `_collect_community_info` into try block, log error (see §1.3) |
 | Missing API key returns 500 | `app.py:939` | Return 503 "Service not configured" instead |
 | Engine reload failure leaves partial state | `app.py:811–813` | Rollback to old state if reload fails |
 | No error handling for corrupt JSON in `/summaries/{version}` | `app.py:1153` | Wrap in try/except, return 500 with detail |
@@ -341,12 +377,23 @@ Both `Config._instance`/`Config.get()` and `get_config()`/`_config` implement se
 
 While not a security risk in a local app (graph_name comes from config), it's still a code quality issue. Using f-strings for Cypher queries is fragile — any future change that makes `graph_name` user-controllable would create a real injection risk.
 
+**Note:** The `_run_cypher` method (line 213–220) accepts a `params` dict parameter, and GDS procedure parameters (`writeProperty`, etc.) can be passed as Cypher parameters. Graph names CAN be parameterized. However, some GDS procedure syntax (like the `MATCH` clause in `gds.graph.project`) requires string literals for labels, making full parameterization complex.
+
 **Fix:** Add validation in `GraphRAGStore.__init__`:
 
 ```python
 import re
 if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', self.graph_name):
     raise ValueError(f"Invalid graph name: {self.graph_name}")
+```
+
+And for the parameters that can be parameterized, use the `_run_cypher` params dict:
+
+```python
+self._run_cypher(
+    "CALL gds.leiden.write($graph_name, {writeProperty: 'community_id', ...})",
+    params={"graph_name": self.graph_name}
+)
 ```
 
 ---
@@ -471,6 +518,8 @@ def _sanitize_metadata(self, metadata: dict) -> dict:
 
 The lifespan context manager has `yield` with no cleanup after it. Active ingestion tasks are orphaned, and the Neo4j driver connection is not explicitly closed.
 
+**Note:** `Neo4jPropertyGraphStore` does not expose a public `close()` method. The underlying driver must be accessed via the private `_driver` attribute.
+
 **Fix:**
 
 ```python
@@ -480,7 +529,10 @@ async def lifespan(app: FastAPI):
     yield
     logger.info("Shutting down...")
     if hasattr(app.state, 'engine') and app.state.engine:
-        app.state.engine.graph_store._driver.close()
+        try:
+            app.state.engine.graph_store._driver.close()
+        except Exception:
+            pass
 ```
 
 ---
@@ -607,7 +659,7 @@ class QueryRequest(BaseModel):
 |---|---|---|---|
 | 1 | Fix `asyncio.run()` in `GraphRAGExtractor.__call__` | **Runtime crash** during background ingestion — complete failure of the ingestion pipeline | Medium |
 | 2 | Atomic state swap during engine reload | Stale/partial state during concurrent queries after ingestion | Small |
-| 3 | Fix bare `except Exception` in `build_communities` | Silent failures lead to corrupted/empty community data downstream | Small |
+| 3 | Fix bare `except Exception` in `build_communities` + move `_collect_community_info` into try block | Silent failures → empty graph query on missing projection → downstream crash | Small |
 | 4 | Broaden exception handling in `_aextract` beyond `ValueError` | Transient LLM errors crash extraction loop, losing all entities from that chunk | Small |
 
 ### P1 — High Priority (Fix Soon)
@@ -631,7 +683,7 @@ class QueryRequest(BaseModel):
 | 14 | Use atomic write-then-rename for `current.json` | Data corruption on crash | Small |
 | 15 | Add degraded startup mode (no Neo4j) | App crash on startup if Neo4j is down — painful UX | Medium |
 | 16 | Add retry logic for LLM calls | Transient network/API failures silently drop entities | Medium |
-| 17 | Cypher string interpolation validation | Code hygiene, future-proofing | Tiny |
+| 17 | Cypher string interpolation + parameterize GDS calls | Code hygiene, minor perf win from planned queries | Small |
 | 18 | Parallelize startup (model loading + summary loading) | 10–30s faster startup | Small |
 | 19 | Convert sync LLM calls to async in `custom_query` path | Blocking event loop during queries | Medium |
 
@@ -646,7 +698,7 @@ class QueryRequest(BaseModel):
 | 24 | Add graceful shutdown in lifespan context | Orphaned Neo4j connections on exit | Small |
 | 25 | Improve logging format (timestamps, module names) | Hard to grep logs when debugging | Tiny |
 | 26 | Add `QueryRequest` max_length validation | Poorly formatted queries degrade LLM output | Tiny |
-| 27 | Migrate `_run_cypher` to async Neo4j driver | Threadpool blocking during ingestion | Large |
+| 27 | Migrate `_run_cypher` to async Neo4j driver | Threadpool blocking during ingestion. **Note:** Requires replacing `Neo4jPropertyGraphStore` (sync-only) with a custom async store or wrapping calls in `asyncio.to_thread()` | Large |
 | 28 | Implement TUI mode in CLI (or remove command) | Incomplete feature confuses users | Large |
 | 29 | Cache entity/community endpoint responses | Minor CPU savings on repeated reads | Small |
 | 30 | Fix `_sanitize_metadata` to copy before modifying | Side-effect bug risk | Tiny |
