@@ -1,4 +1,6 @@
 import asyncio
+import json
+import logging
 import re
 from collections import defaultdict
 from typing import (Any, Callable, Dict, List, LiteralString, Optional, Union,
@@ -22,6 +24,8 @@ from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
 
 # import networkx as nx
+
+logger = logging.getLogger(__name__)
 
 
 class GraphQueryResponse(BaseModel):
@@ -86,7 +90,18 @@ class GraphRAGExtractor(TransformComponent):
         self, nodes: List[BaseNode], show_progress: bool = False, **kwargs: Any
     ) -> List[BaseNode]:
         """Extract triples from nodes."""
-        return asyncio.run(self.acall(nodes, show_progress=show_progress, **kwargs))
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, self.acall(nodes, show_progress=show_progress, **kwargs))
+                return future.result()
+        else:
+            return asyncio.run(self.acall(nodes, show_progress=show_progress, **kwargs))
 
     async def _aextract(self, node: BaseNode) -> BaseNode:
         """Extract triples from a node."""
@@ -99,11 +114,17 @@ class GraphRAGExtractor(TransformComponent):
                 text=text,
                 max_knowledge_triplets=self.max_paths_per_chunk,
             )
-            # TEST
-            # print(f"DEBUG raw llm response: {llm_response}")
+        except Exception:
+            # LLM/network errors should propagate so the calling job can
+            # retry or fail visibly — don't swallow them here.
+            raise
+
+        try:
             entities, entities_relationship = self.parse_fn(llm_response)
-        except ValueError as e:
-            print(f"DEBUG ValueError: {e}")
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as e:
+            # Only catch parse/format errors — malformed LLM output is
+            # expected occasionally and should degrade gracefully.
+            logger.warning("LLM extraction failed for node: %s: %s", type(e).__name__, e)
             entities = []
             entities_relationship = []
 
@@ -207,7 +228,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         response = self.llm.chat(messages)
 
         clean_response = re.sub(r"^assistant:\s*", "", str(response)).strip()
-        print("TEST: constructed")
+        logger.debug("Community summary response constructed")
         return clean_response
 
     def _run_cypher(self, query: str, params: Dict[str, Any] | None = None):
@@ -260,15 +281,21 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             """
             )
             # print("DEBUG: leiden succeeded")
+            self._collect_community_info()
         except Exception as e:
-            print(f"DEBUG: build_communities failed: {type(e).__name__}: {e}")
+            logger.error("build_communities failed: %s: %s", type(e).__name__, e)
+            raise
         finally:
             # drop graph projection
-            # print("DEBUG: dropping graph projection")
-            self._run_cypher(
-                f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
-            )
-        self._collect_community_info()
+            try:
+                self._run_cypher(
+                    f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
+                )
+            except Exception as e:
+                logger.debug(
+                    "Could not drop GDS graph projection '%s': %s: %s",
+                    self.graph_name, type(e).__name__, e,
+                )
 
     def _collect_community_info(self):
         """
@@ -306,8 +333,8 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         self._summarize_communities(community_info)
 
     def _summarize_communities(self, community_info):
-        print("summarize communities")
         """Generate and store summaries for each community."""
+        logger.debug("summarize communities")
         for community_id, details in community_info.items():
             details_text = "\n".join(details) + "."  # Ensure it ends with a period
             self.community_summary[community_id] = self.generate_community_summary(
@@ -315,8 +342,8 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             )
 
     def get_community_summaries(self):
-        print("getting community summaries")
         """Returns the community summaries, building them if not already done."""
+        logger.debug("getting community summaries")
         if not self.community_summary:
             self.build_communities()
         return self.community_summary

@@ -1,7 +1,9 @@
+import asyncio
 import json
 import logging
 import os
 import re
+import threading
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
 
@@ -243,17 +245,19 @@ async def lifespan(app: FastAPI):
 
         # 4. Initialize Query Engine
         logger.info("[STARTUP] Step 4: Initializing QueryEngine...")
-        app.state.engine = GraphRAGQueryEngine(
+        new_engine = GraphRAGQueryEngine(
             graph_store=graph_store, index=index, llm=Settings.llm
         )
         logger.info(f"[STARTUP] Step 4 complete ({time.time() - start_time:.2f}s)")
 
-        # 5. Store data for API endpoints
-        app.state.community_summaries = {
-            str(k): v for k, v in community_summaries.items()
-        }
+        # 5. Store data for API endpoints — build first, then assign
+        new_summaries = {str(k): v for k, v in community_summaries.items()}
+        new_summaries_loaded = len(community_summaries) > 0
+
+        app.state.engine = new_engine
+        app.state.community_summaries = new_summaries
         app.state.entity_info = entity_info
-        app.state.summaries_loaded = len(community_summaries) > 0
+        app.state.summaries_loaded = new_summaries_loaded
 
         if not app.state.summaries_loaded:
             logger.warning(
@@ -551,6 +555,10 @@ class IngestResponse(BaseModel):
 # Ingestion state tracking (for background tasks)
 ingestion_status: Dict[str, dict] = {}
 
+# Lock for thread-safe state updates during ingestion reload
+# Uses threading.Lock because run_full_ingestion runs in a background thread
+_state_lock = threading.Lock()
+
 
 def extract_json(text: str):
     """
@@ -589,7 +597,7 @@ def parse_fn(response_str: str):
     entities = []
     relationships = []
     data = extract_json(response_str)
-    if not data:
+    if not data or not isinstance(data, dict):
         return entities, relationships
     try:
         entities = [
@@ -793,19 +801,24 @@ def run_full_ingestion(
                 embed_model=Settings.embed_model,
             )
 
-            app.state.engine = GraphRAGQueryEngine(
+            new_engine = GraphRAGQueryEngine(
                 graph_store=new_graph_store,
                 index=new_index,
                 llm=Settings.llm,
             )
 
-            # Update API endpoint state
-            app.state.community_summaries = {
-                str(k): v
-                for k, v in index.property_graph_store.community_summary.items()
-            }
-            app.state.entity_info = index.property_graph_store.entity_info
-            app.state.summaries_loaded = True  # Enable /query endpoint after successful reload
+            # Build all state values before assigning to minimize window for partial reads
+            new_summaries = {str(k): v for k, v in index.property_graph_store.community_summary.items()}
+            new_entity_info = index.property_graph_store.entity_info
+
+            # Swap all state at once to minimize window for partial reads
+            # Only mark ready if rebuild actually produced summaries
+            new_summaries_loaded = len(new_summaries) > 0
+            with _state_lock:
+                app.state.engine = new_engine
+                app.state.community_summaries = new_summaries
+                app.state.entity_info = new_entity_info
+                app.state.summaries_loaded = new_summaries_loaded
 
             logger.info("GraphRAG engine reloaded successfully.")
         except Exception as reload_error:
