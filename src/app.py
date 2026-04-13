@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import time
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
 
@@ -179,6 +180,7 @@ class QueryRequest(BaseModel):
         ...,
         description="The query to ask the knowledge graph",
         examples=["What are the main news topics discussed?"],
+        max_length=2000,
     )
     similarity_top_k: int = Field(default=20, ge=1, le=50)
 
@@ -284,6 +286,19 @@ async def root():
     return {
         "message": "Study Buddy GraphRAG API is online. Go to /docs for Swagger UI."
     }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint - verifies Neo4j connectivity."""
+    try:
+        if hasattr(app.state, "engine") and app.state.engine:
+            app.state.engine.graph_store._run_cypher("RETURN 1")
+            return {"status": "healthy", "neo4j": "connected", "summaries_loaded": getattr(app.state, "summaries_loaded", False)}
+        else:
+            return {"status": "degraded", "neo4j": "not_initialized", "summaries_loaded": False}
+    except Exception as e:
+        return {"status": "unhealthy", "neo4j": "error", "error": str(e), "summaries_loaded": getattr(app.state, "summaries_loaded", False)}
 
 
 @app.post("/query", response_model=GraphQueryResponse)
@@ -550,6 +565,19 @@ class IngestResponse(BaseModel):
 
 # Ingestion state tracking (for background tasks)
 ingestion_status: Dict[str, dict] = {}
+MAX_INGESTION_AGE = 3600  # 1 hour in seconds
+
+
+def cleanup_ingestion_status():
+    """Remove ingestion_status entries older than MAX_INGESTION_AGE."""
+    now = time.time()
+    to_remove = [
+        tid for tid, info in ingestion_status.items()
+        if isinstance(info, dict) and info.get("status") in ("completed", "error")
+        and info.get("completed_at", now) < now - MAX_INGESTION_AGE
+    ]
+    for tid in to_remove:
+        del ingestion_status[tid]
 
 
 def extract_json(text: str):
@@ -622,6 +650,7 @@ def run_full_ingestion(
 ):
     """Run the complete ingestion pipeline (called as background task)."""
     try:
+        cleanup_ingestion_status()
         ingestion_status[task_id] = {"status": "extracting_nodes", "progress": 0}
 
         # Initialize components
@@ -632,6 +661,7 @@ def run_full_ingestion(
             ingestion_status[task_id] = {
                 "status": "error",
                 "error": "OPENAI_API_KEY not set",
+                "completed_at": time.time(),
             }
             return
 
@@ -695,6 +725,7 @@ def run_full_ingestion(
             ingestion_status[task_id] = {
                 "status": "error",
                 "error": "No nodes extracted",
+                "completed_at": time.time(),
             }
             return
 
@@ -747,12 +778,24 @@ def run_full_ingestion(
         summary_path = os.path.join(output_dir, f"community_summaries_{timestamp}.json")
         entity_info_path = os.path.join(output_dir, f"entity_info_{timestamp}.json")
 
-        with open(summary_path, "w", encoding="utf-8") as f:
-            json.dump(index.property_graph_store.community_summary, f, indent=4)
+        summary_tmp = summary_path + ".tmp"
+        try:
+            with open(summary_tmp, "w", encoding="utf-8") as f:
+                json.dump(index.property_graph_store.community_summary, f, indent=4)
+            os.replace(summary_tmp, summary_path)
+        finally:
+            if os.path.exists(summary_tmp):
+                os.unlink(summary_tmp)
         logger.info(f"Community summaries saved to {summary_path}")
 
-        with open(entity_info_path, "w", encoding="utf-8") as f:
-            json.dump(index.property_graph_store.entity_info, f, indent=4)
+        entity_tmp = entity_info_path + ".tmp"
+        try:
+            with open(entity_tmp, "w", encoding="utf-8") as f:
+                json.dump(index.property_graph_store.entity_info, f, indent=4)
+            os.replace(entity_tmp, entity_info_path)
+        finally:
+            if os.path.exists(entity_tmp):
+                os.unlink(entity_tmp)
         logger.info(f"Entity info saved to {entity_info_path}")
 
         # Update current.json pointer
@@ -769,8 +812,14 @@ def run_full_ingestion(
                 "total_communities": len(index.property_graph_store.community_summary),
             },
         }
-        with open(current_path, "w", encoding="utf-8") as f:
-            json.dump(current_info, f, indent=4)
+        current_tmp = current_path + ".tmp"
+        try:
+            with open(current_tmp, "w", encoding="utf-8") as f:
+                json.dump(current_info, f, indent=4)
+            os.replace(current_tmp, current_path)
+        finally:
+            if os.path.exists(current_tmp):
+                os.unlink(current_tmp)
         logger.info(f"Current version updated to {timestamp}")
 
         # Reload cached API state so endpoints reflect the new data
@@ -793,19 +842,23 @@ def run_full_ingestion(
                 embed_model=Settings.embed_model,
             )
 
-            app.state.engine = GraphRAGQueryEngine(
+            # Build new engine state before swapping
+            new_engine = GraphRAGQueryEngine(
                 graph_store=new_graph_store,
                 index=new_index,
                 llm=Settings.llm,
             )
-
-            # Update API endpoint state
-            app.state.community_summaries = {
+            new_community_summaries = {
                 str(k): v
                 for k, v in index.property_graph_store.community_summary.items()
             }
-            app.state.entity_info = index.property_graph_store.entity_info
-            app.state.summaries_loaded = True  # Enable /query endpoint after successful reload
+            new_entity_info = index.property_graph_store.entity_info
+
+            # Atomic state swap - update all state at once
+            app.state.engine = new_engine
+            app.state.community_summaries = new_community_summaries
+            app.state.entity_info = new_entity_info
+            app.state.summaries_loaded = True
 
             logger.info("GraphRAG engine reloaded successfully.")
         except Exception as reload_error:
@@ -823,6 +876,7 @@ def run_full_ingestion(
             "total_entities": total_entities,
             "total_communities": total_communities,
             "files_processed": processed_files,
+            "completed_at": time.time(),
         }
 
     except Exception as e:
@@ -830,7 +884,7 @@ def run_full_ingestion(
         import traceback
 
         traceback.print_exc()
-        ingestion_status[task_id] = {"status": "error", "error": str(e)}
+        ingestion_status[task_id] = {"status": "error", "error": str(e), "completed_at": time.time()}
 
 
 @app.post("/ingest", response_model=IngestResponse)
