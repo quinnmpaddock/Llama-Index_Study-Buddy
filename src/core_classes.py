@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 from collections import defaultdict
 from typing import (Any, Callable, Dict, List, LiteralString, Optional, Union,
@@ -22,6 +23,8 @@ from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
 
 # import networkx as nx
+
+logger = logging.getLogger(__name__)
 
 
 class GraphQueryResponse(BaseModel):
@@ -103,7 +106,7 @@ class GraphRAGExtractor(TransformComponent):
             # print(f"DEBUG raw llm response: {llm_response}")
             entities, entities_relationship = self.parse_fn(llm_response)
         except ValueError as e:
-            print(f"DEBUG ValueError: {e}")
+            logger.debug("ValueError in _aextract: %s", e)
             entities = []
             entities_relationship = []
 
@@ -207,7 +210,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         response = self.llm.chat(messages)
 
         clean_response = re.sub(r"^assistant:\s*", "", str(response)).strip()
-        print("TEST: constructed")
+        logger.debug("Community summary response constructed")
         return clean_response
 
     def _run_cypher(self, query: str, params: Dict[str, Any] | None = None):
@@ -261,13 +264,18 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             )
             # print("DEBUG: leiden succeeded")
         except Exception as e:
-            print(f"DEBUG: build_communities failed: {type(e).__name__}: {e}")
+            logger.debug("build_communities failed: %s: %s", type(e).__name__, e)
         finally:
             # drop graph projection
-            # print("DEBUG: dropping graph projection")
-            self._run_cypher(
-                f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
-            )
+            try:
+                self._run_cypher(
+                    f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
+                )
+            except Exception as e:
+                logger.debug(
+                    "Could not drop GDS graph projection '%s': %s: %s",
+                    self.graph_name, type(e).__name__, e,
+                )
         self._collect_community_info()
 
     def _collect_community_info(self):
@@ -306,8 +314,8 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         self._summarize_communities(community_info)
 
     def _summarize_communities(self, community_info):
-        print("summarize communities")
         """Generate and store summaries for each community."""
+        logger.debug("summarize communities")
         for community_id, details in community_info.items():
             details_text = "\n".join(details) + "."  # Ensure it ends with a period
             self.community_summary[community_id] = self.generate_community_summary(
@@ -315,8 +323,8 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             )
 
     def get_community_summaries(self):
-        print("getting community summaries")
         """Returns the community summaries, building them if not already done."""
+        logger.debug("getting community summaries")
         if not self.community_summary:
             self.build_communities()
         return self.community_summary

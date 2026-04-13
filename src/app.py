@@ -589,7 +589,7 @@ def parse_fn(response_str: str):
     entities = []
     relationships = []
     data = extract_json(response_str)
-    if not data:
+    if not data or not isinstance(data, dict):
         return entities, relationships
     try:
         entities = [
