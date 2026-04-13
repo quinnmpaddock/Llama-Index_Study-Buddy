@@ -43,3 +43,4 @@ requirements_backup.txt
 requirements_pinned.txt
 
 data_old/
+.worktrees/
