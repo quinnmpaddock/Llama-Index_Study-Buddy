@@ -89,7 +89,18 @@ class GraphRAGExtractor(TransformComponent):
         self, nodes: List[BaseNode], show_progress: bool = False, **kwargs: Any
     ) -> List[BaseNode]:
         """Extract triples from nodes."""
-        return asyncio.run(self.acall(nodes, show_progress=show_progress, **kwargs))
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, self.acall(nodes, show_progress=show_progress, **kwargs))
+                return future.result()
+        else:
+            return asyncio.run(self.acall(nodes, show_progress=show_progress, **kwargs))
 
     async def _aextract(self, node: BaseNode) -> BaseNode:
         """Extract triples from a node."""
@@ -105,8 +116,8 @@ class GraphRAGExtractor(TransformComponent):
             # TEST
             # print(f"DEBUG raw llm response: {llm_response}")
             entities, entities_relationship = self.parse_fn(llm_response)
-        except ValueError as e:
-            logger.debug("ValueError in _aextract: %s", e)
+        except Exception as e:
+            logger.warning("LLM extraction failed for node: %s: %s", type(e).__name__, e)
             entities = []
             entities_relationship = []
 
@@ -263,8 +274,9 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             """
             )
             # print("DEBUG: leiden succeeded")
+            self._collect_community_info()
         except Exception as e:
-            logger.debug("build_communities failed: %s: %s", type(e).__name__, e)
+            logger.error("build_communities failed: %s: %s", type(e).__name__, e)
         finally:
             # drop graph projection
             try:
@@ -276,7 +288,6 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                     "Could not drop GDS graph projection '%s': %s: %s",
                     self.graph_name, type(e).__name__, e,
                 )
-        self._collect_community_info()
 
     def _collect_community_info(self):
         """
