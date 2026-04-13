@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import List, Sequence
 
 from llama_index.core import Document, SimpleDirectoryReader, StorageContext
@@ -8,6 +9,8 @@ from llama_index.core.schema import BaseNode, TextNode
 from llama_index.node_parser.docling import DoclingNodeParser
 from llama_index.readers.docling import DoclingReader
 from llama_index.readers.file import CSVReader, FlatReader, MarkdownReader
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentIngestion:
@@ -59,12 +62,10 @@ class DocumentIngestion:
             #             )
 
             if nodes:
-                print(f"DEBUG: First node metadata keys: {nodes[0].metadata.keys()}")
-                for k, v in nodes[0].metadata.items():
-                    print(f"DEBUG: metadata[{k}] type: {type(v)}")
+                logger.debug(f"Ingested {len(nodes)} nodes from document")
             for node in nodes:
                 if node.metadata:
-                    self._sanitize_metadata(node.metadata)
+                    node.metadata = self._sanitize_metadata(node.metadata)
             all_nodes.extend(nodes)
         return all_nodes
 
@@ -73,15 +74,18 @@ class DocumentIngestion:
         - Convert large integers to strings.
         - Convert dictionaries to JSON strings.
         - Convert lists with non-primitive elements to JSON strings.
+
+        Returns a copy to avoid mutating the original metadata dict.
         """
         MAX_INT = 9223372036854775807
         MIN_INT = -9223372036854775808
 
-        for k, v in metadata.items():
+        sanitized = metadata.copy()
+        for k, v in sanitized.items():
             if isinstance(v, int) and (v > MAX_INT or v < MIN_INT):
-                metadata[k] = str(v)
+                sanitized[k] = str(v)
             elif isinstance(v, dict):
-                metadata[k] = json.dumps(v)
+                sanitized[k] = json.dumps(v)
             elif isinstance(v, list):
                 # Check if the list contains only Neo4j-compatible primitives
                 is_primitive_list = all(
@@ -90,13 +94,17 @@ class DocumentIngestion:
                 )
                 if is_primitive_list:
                     # Still need to check for large ints within the primitive list
-                    for i, item in enumerate(v):
+                    new_list = []
+                    for item in v:
                         if isinstance(item, int) and (item > MAX_INT or item < MIN_INT):
-                            v[i] = str(item)
+                            new_list.append(str(item))
+                        else:
+                            new_list.append(item)
+                    sanitized[k] = new_list
                 else:
                     # Contains dicts or other lists, so stringify the whole list
-                    metadata[k] = json.dumps(v)
-        return metadata
+                    sanitized[k] = json.dumps(v)
+        return sanitized
 
     def get_parser_for_doc(self, doc: Document):
         """Returns appropriate node parser based on file extension"""
