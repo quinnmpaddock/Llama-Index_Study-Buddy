@@ -1,8 +1,14 @@
 import asyncio
+import logging
 import re
 from collections import defaultdict
-from typing import (Any, Callable, Dict, List, LiteralString, Optional, Union,
-                    cast)
+from typing import Any, Callable, Dict, List, LiteralString, Optional, Union, cast
+
+import nest_asyncio
+
+nest_asyncio.apply()
+
+logger = logging.getLogger(__name__)
 
 from llama_index.core import PropertyGraphIndex, Settings
 from llama_index.core.async_utils import run_jobs
@@ -99,11 +105,9 @@ class GraphRAGExtractor(TransformComponent):
                 text=text,
                 max_knowledge_triplets=self.max_paths_per_chunk,
             )
-            # TEST
-            # print(f"DEBUG raw llm response: {llm_response}")
             entities, entities_relationship = self.parse_fn(llm_response)
-        except ValueError as e:
-            print(f"DEBUG ValueError: {e}")
+        except Exception as e:
+            logger.warning(f"LLM extraction failed for node: {type(e).__name__}: {e}")
             entities = []
             entities_relationship = []
 
@@ -207,7 +211,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         response = self.llm.chat(messages)
 
         clean_response = re.sub(r"^assistant:\s*", "", str(response)).strip()
-        print("TEST: constructed")
+        logger.info("Constructed community summary")
         return clean_response
 
     def _run_cypher(self, query: str, params: Dict[str, Any] | None = None):
@@ -221,15 +225,6 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
 
     def build_communities(self):
         """Builds communities from the graph and persists them to the neo4j database"""
-        # print("DEBUG: starting build_communitites")
-        # check for existing graph projection
-        # try:
-        #     self._run_cypher(
-        #         f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName"
-        #     )
-        #     print(f"{self.graph_name} was found open and dropped from memory.")
-        # except Exception:
-        #     pass
         try:
             # project the graph to memory
             self._run_cypher(
@@ -245,7 +240,6 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                 )
             """
             )
-            # print("DEBUG: projection succeeded")
 
             # run leiden community detection and write to neo4j
             self._run_cypher(
@@ -259,16 +253,20 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                 YIELD communityCount
             """
             )
-            # print("DEBUG: leiden succeeded")
+
+            # Only collect community info if projection and leiden succeeded
+            self._collect_community_info()
+
         except Exception as e:
-            print(f"DEBUG: build_communities failed: {type(e).__name__}: {e}")
+            logger.error(f"build_communities failed: {type(e).__name__}: {e}")
         finally:
-            # drop graph projection
-            # print("DEBUG: dropping graph projection")
-            self._run_cypher(
-                f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
-            )
-        self._collect_community_info()
+            # drop graph projection — may fail if projection was never created
+            try:
+                self._run_cypher(
+                    f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
+                )
+            except Exception:
+                pass
 
     def _collect_community_info(self):
         """
@@ -306,7 +304,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         self._summarize_communities(community_info)
 
     def _summarize_communities(self, community_info):
-        print("summarize communities")
+        logger.info("Summarizing communities...")
         """Generate and store summaries for each community."""
         for community_id, details in community_info.items():
             details_text = "\n".join(details) + "."  # Ensure it ends with a period
@@ -315,7 +313,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             )
 
     def get_community_summaries(self):
-        print("getting community summaries")
+        logger.info("Getting community summaries")
         """Returns the community summaries, building them if not already done."""
         if not self.community_summary:
             self.build_communities()
