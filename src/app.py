@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import concurrent.futures
 import time
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
@@ -211,12 +212,17 @@ async def lifespan(app: FastAPI):
     start_time = time.time()
     
     try:
-        # 1. Setup Models (using config)
-        logger.info("[STARTUP] Step 1: Loading embedding model...")
+        # 1. Load embedding model and summaries in parallel
+        logger.info("[STARTUP] Step 1: Loading embedding model and summaries in parallel...")
         logger.info(f"[STARTUP] Using embedding model: {config.embedding.model}")
-        Settings.embed_model = HuggingFaceEmbedding(
-            model_name=config.embedding.model
-        )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            embed_future = executor.submit(HuggingFaceEmbedding, model_name=config.embedding.model)
+            summaries_future = executor.submit(load_summaries_and_entity_info)
+            
+            Settings.embed_model = embed_future.result()
+            community_summaries, entity_info = summaries_future.result()
+
         logger.info(f"[STARTUP] Step 1 complete ({time.time() - start_time:.2f}s)")
 
         if not config.llm.api_key:
@@ -229,11 +235,6 @@ async def lifespan(app: FastAPI):
             api_key=config.llm.api_key,
             is_chat_model=True,
         )
-        
-        # 2. Load Persisted Summaries
-        logger.info("[STARTUP] Step 2: Loading summaries...")
-        community_summaries, entity_info = load_summaries_and_entity_info()
-        logger.info(f"[STARTUP] Step 2 complete ({time.time() - start_time:.2f}s)")
 
         # 3. Initialize Store and Index
         # We pass the loaded summaries directly to the store
