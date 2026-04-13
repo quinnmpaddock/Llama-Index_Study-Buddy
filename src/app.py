@@ -38,6 +38,17 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SUMMARIES_DIR = os.path.join(BASE_DIR, "..", "summaries")
 
 
+def build_community_to_entities(entity_info: dict) -> dict:
+    """Build reverse index: community_id -> sorted list of entity names."""
+    from collections import defaultdict
+    community_to_entities = defaultdict(list)
+    for entity_name, communities in entity_info.items():
+        for comm_id in communities:
+            community_to_entities[comm_id].append(entity_name)
+    # Deduplicate and sort each entity list
+    return {k: sorted(set(v)) for k, v in community_to_entities.items()}
+
+
 def find_most_recent_snapshot():
     """
     Scan the summaries directory for the most recent complete snapshot pair.
@@ -260,6 +271,7 @@ async def lifespan(app: FastAPI):
             str(k): v for k, v in community_summaries.items()
         }
         app.state.entity_info = entity_info
+        app.state.community_to_entities = build_community_to_entities(entity_info)
         app.state.summaries_loaded = len(community_summaries) > 0
 
         if not app.state.summaries_loaded:
@@ -270,8 +282,13 @@ async def lifespan(app: FastAPI):
 
         logger.info(f"GraphRAG Engine successfully initialized in {time.time() - start_time:.2f}s)")
     except Exception as e:
-        logger.error(f"Failed to initialize engine: {str(e)}")
-        raise e
+        logger.warning(f"Engine initialization failed: {e}. Starting in degraded mode.")
+        logger.warning("Queries will fail until data is ingested. Restart after starting Neo4j.")
+        app.state.engine = None
+        app.state.community_summaries = {}
+        app.state.entity_info = {}
+        app.state.community_to_entities = {}
+        app.state.summaries_loaded = False
 
     yield
     logger.info("Shutting down...")
@@ -312,8 +329,8 @@ async def query_graph(request: QueryRequest):
     Submit a query to the GraphRAG engine.
     Returns the answer along with communities consulted and entities found.
     """
-    if not hasattr(app.state, "engine"):
-        raise HTTPException(status_code=503, detail="Engine not initialized")
+    if not hasattr(app.state, "engine") or app.state.engine is None:
+        raise HTTPException(status_code=503, detail="Engine not initialized. Neo4j may be unavailable. Restart the app after starting Neo4j.")
     
     if not getattr(app.state, "summaries_loaded", False):
         raise HTTPException(
@@ -440,23 +457,12 @@ async def list_communities():
 
     summaries = app.state.community_summaries
 
-    # Build community list with entity counts from entity_info
-    # entity_info maps entity_name -> [community_ids as integers]
-    # summaries has string keys for community IDs
-    entity_info = app.state.entity_info
-    community_entities: Dict[int, List[str]] = {}
-
-    for entity_name, communities in entity_info.items():
-        for comm_id in communities:
-            # comm_id is an integer from entity_info
-            if comm_id not in community_entities:
-                community_entities[comm_id] = []
-            community_entities[comm_id].append(entity_name)
+    community_to_entities = app.state.community_to_entities
 
     communities = [
         {
             "id": int(comm_id_str),
-            "entity_count": len(set(community_entities.get(int(comm_id_str), []))),
+            "entity_count": len(community_to_entities.get(int(comm_id_str), [])),
             "summary_preview": _make_summary_preview(summaries.get(comm_id_str, "")),
         }
         for comm_id_str in sorted(summaries.keys(), key=int)
@@ -516,9 +522,8 @@ async def get_community(id: int):
     if summary is None:
         raise HTTPException(status_code=404, detail=f"Community {id} not found")
 
-    # Count entities in this community
-    entity_info = app.state.entity_info
-    entity_count = sum(1 for communities in entity_info.values() if id in communities)
+    community_to_entities = app.state.community_to_entities
+    entity_count = len(community_to_entities.get(id, []))
 
     return {"id": id, "summary": summary, "entity_count": entity_count}
 
@@ -534,12 +539,12 @@ async def get_community_entities(id: int):
     if str(id) not in app.state.community_summaries:
         raise HTTPException(status_code=404, detail=f"Community {id} not found")
 
-    entity_info = app.state.entity_info
-    entities = [name for name, communities in entity_info.items() if id in communities]
+    community_to_entities = app.state.community_to_entities
+    entities = community_to_entities.get(id, [])
 
     return {
         "community_id": id,
-        "entities": sorted(set(entities)),
+        "entities": entities,
         "total": len(entities),
     }
 
@@ -800,6 +805,7 @@ def run_full_ingestion(
             app.state.engine = new_engine
             app.state.community_summaries = new_community_summaries
             app.state.entity_info = new_entity_info
+            app.state.community_to_entities = build_community_to_entities(new_entity_info)
             app.state.summaries_loaded = True
 
             logger.info("GraphRAG engine reloaded successfully.")
