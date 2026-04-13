@@ -19,13 +19,18 @@ from core_classes import (GraphQueryResponse, GraphRAGExtractor,
                           GraphRAGQueryEngine, GraphRAGStore)
 from ingestion import DocumentIngestion
 from config import get_config, ConfigError
+from utils.parsing import parse_fn, SUPPORTED_EXTENSIONS
 
 # Load environment variables
 load_dotenv()
 
 # --- Configuration & Setup ---
 config = get_config()
-logging.basicConfig(level=config.server.log_level)
+logging.basicConfig(
+    level=config.server.log_level,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
 # Directory constants
@@ -580,69 +585,6 @@ def cleanup_ingestion_status():
         del ingestion_status[tid]
 
 
-def extract_json(text: str):
-    """
-    Extract and parse JSON from text.
-
-    First tries a fast regex match, then falls back to progressively
-    shrinking the substring from the end until valid JSON is found.
-
-    Returns parsed dict on success, None on failure.
-    """
-    # Fast path: try regex match first
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            pass  # Fall through to slow path
-
-    # Slow path: find first { and shrink from end
-    start = text.find("{")
-    if start == -1:
-        return None
-
-    for end in range(len(text), start, -1):
-        substring = text[start:end]
-        try:
-            return json.loads(substring)
-        except json.JSONDecodeError:
-            continue
-
-    return None
-
-
-def parse_fn(response_str: str):
-    """Parse LLM response for entity/relationship extraction."""
-    entities = []
-    relationships = []
-    data = extract_json(response_str)
-    if not data:
-        return entities, relationships
-    try:
-        entities = [
-            (
-                entity["entity_name"],
-                entity["entity_type"],
-                entity["entity_description"],
-            )
-            for entity in data.get("entities", [])
-        ]
-        relationships = [
-            (
-                relation["source_entity"],
-                relation["target_entity"],
-                relation["relation"],
-                relation["relationship_description"],
-            )
-            for relation in data.get("relationships", [])
-        ]
-        return entities, relationships
-    except json.JSONDecodeError as e:
-        logger.warning(f"Error parsing JSON: {e}")
-        return entities, relationships
-
-
 def run_full_ingestion(
     directory: str,
     files_to_process: List[str],
@@ -919,19 +861,6 @@ async def ingest_documents(
             status_code=400, detail=f"Path is not a directory: {request.directory}"
         )
 
-    # Determine files to process
-    supported_extensions = {
-        ".pdf",
-        ".docx",
-        ".pptx",
-        ".html",
-        ".xlsx",
-        ".md",
-        ".csv",
-        ".txt",
-        ".json",
-    }
-
     # Resolve the directory to its canonical absolute path
     dir_root = dir_path.resolve()
 
@@ -958,11 +887,11 @@ async def ingest_documents(
                 )
 
             # Validate extension
-            if candidate.suffix.lower() not in supported_extensions:
+            if candidate.suffix.lower() not in SUPPORTED_EXTENSIONS:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Unsupported file extension: {candidate.suffix}. "
-                    f"Supported: {', '.join(sorted(supported_extensions))}",
+                    f"Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
                 )
 
             # Check file exists
@@ -977,7 +906,7 @@ async def ingest_documents(
         files_to_process = [
             str(dir_path / f)
             for f in os.listdir(dir_path)
-            if Path(f).suffix.lower() in supported_extensions
+            if Path(f).suffix.lower() in SUPPORTED_EXTENSIONS
         ]
 
     if not files_to_process:
@@ -1052,22 +981,10 @@ async def preview_ingest(
             status_code=400, detail=f"Path is not a directory: {directory}"
         )
 
-    supported_extensions = {
-        ".pdf",
-        ".docx",
-        ".pptx",
-        ".html",
-        ".xlsx",
-        ".md",
-        ".csv",
-        ".txt",
-        ".json",
-    }
-
     files = []
     for f in sorted(os.listdir(dir_path)):
         file_path = dir_path / f
-        if file_path.is_file() and Path(f).suffix.lower() in supported_extensions:
+        if file_path.is_file() and Path(f).suffix.lower() in SUPPORTED_EXTENSIONS:
             files.append(
                 {
                     "name": f,
@@ -1078,7 +995,7 @@ async def preview_ingest(
 
     return {
         "directory": str(dir_path.absolute()),
-        "supported_extensions": list(supported_extensions),
+        "supported_extensions": list(SUPPORTED_EXTENSIONS),
         "files": files,
         "total_files": len(files),
     }
@@ -1109,11 +1026,6 @@ class SummaryCleanupResponse(BaseModel):
     deleted: List[str]
     kept: List[str]
     message: str
-
-
-SUMMARIES_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "summaries"
-)
 
 
 def get_summaries_dir() -> str:

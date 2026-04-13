@@ -60,7 +60,7 @@ neo4j:
   # Password for Neo4j authentication.
   # NOTE: For security, consider setting NEO4J_PASSWORD environment
   # variable instead of storing it here.
-  password: "neo4j2026"
+  password: "CHANGE_ME"
   # Query timeout in seconds (for long-running Cypher queries)
   # Default: 120 seconds (2 minutes) - handles large graph operations
   timeout: 120

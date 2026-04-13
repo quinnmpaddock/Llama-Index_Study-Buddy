@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import re
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -14,6 +13,7 @@ from llama_index.llms.openai_like import OpenAILike
 from config import get_config
 from core_classes import GraphRAGExtractor, GraphRAGStore
 from ingestion import DocumentIngestion
+from utils.parsing import parse_fn
 
 # Load environment variables
 load_dotenv()
@@ -50,40 +50,6 @@ input_path = os.path.join(BASE_DIR, "..", "input")
 template_loc = "prompts"
 template_fileName = "kg_extract_template.txt"
 template_prompt = os.path.join(BASE_DIR, template_loc, template_fileName)
-
-
-def parse_fn(response_str: str):
-    print(f"DEBUG: LLM Response: {response_str}")
-    json_pattern = r"\{.*\}"
-    match = re.search(json_pattern, response_str, re.DOTALL)
-    entities = []
-    relationships = []
-    if not match:
-        return entities, relationships
-    json_str = match.group(0)
-    try:
-        data = json.loads(json_str)
-        entities = [
-            (
-                entity["entity_name"],
-                entity["entity_type"],
-                entity["entity_description"],
-            )
-            for entity in data.get("entities", [])
-        ]
-        relationships = [
-            (
-                relation["source_entity"],
-                relation["target_entity"],
-                relation["relation"],
-                relation["relationship_description"],
-            )
-            for relation in data.get("relationships", [])
-        ]
-        return entities, relationships
-    except json.JSONDecodeError as e:
-        print("Error parsing JSON:", e)
-        return entities, relationships
 
 
 def main():

@@ -50,6 +50,11 @@ class Neo4jConfig:
         self.username = config_dict.get("username", "neo4j")
         # Password: environment variable overrides config file
         self.password = os.environ.get("NEO4J_PASSWORD", config_dict.get("password", "neo4j2026"))
+        if "NEO4J_PASSWORD" not in os.environ and config_dict.get("password"):
+            logger.warning(
+                "Neo4j password loaded from config file. "
+                "Set NEO4J_PASSWORD environment variable for better security."
+            )
         self.timeout = config_dict.get("timeout", 120.0)
 
 
