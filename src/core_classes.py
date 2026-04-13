@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import re
 from collections import defaultdict
@@ -113,10 +114,16 @@ class GraphRAGExtractor(TransformComponent):
                 text=text,
                 max_knowledge_triplets=self.max_paths_per_chunk,
             )
-            # TEST
-            # print(f"DEBUG raw llm response: {llm_response}")
+        except Exception:
+            # LLM/network errors should propagate so the calling job can
+            # retry or fail visibly — don't swallow them here.
+            raise
+
+        try:
             entities, entities_relationship = self.parse_fn(llm_response)
-        except Exception as e:
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as e:
+            # Only catch parse/format errors — malformed LLM output is
+            # expected occasionally and should degrade gracefully.
             logger.warning("LLM extraction failed for node: %s: %s", type(e).__name__, e)
             entities = []
             entities_relationship = []
@@ -277,6 +284,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             self._collect_community_info()
         except Exception as e:
             logger.error("build_communities failed: %s: %s", type(e).__name__, e)
+            raise
         finally:
             # drop graph projection
             try:

@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import threading
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
 
@@ -555,7 +556,8 @@ class IngestResponse(BaseModel):
 ingestion_status: Dict[str, dict] = {}
 
 # Lock for thread-safe state updates during ingestion reload
-_state_lock = asyncio.Lock()
+# Uses threading.Lock because run_full_ingestion runs in a background thread
+_state_lock = threading.Lock()
 
 
 def extract_json(text: str):
@@ -810,10 +812,13 @@ def run_full_ingestion(
             new_entity_info = index.property_graph_store.entity_info
 
             # Swap all state at once to minimize window for partial reads
-            app.state.engine = new_engine
-            app.state.community_summaries = new_summaries
-            app.state.entity_info = new_entity_info
-            app.state.summaries_loaded = True
+            # Only mark ready if rebuild actually produced summaries
+            new_summaries_loaded = len(new_summaries) > 0
+            with _state_lock:
+                app.state.engine = new_engine
+                app.state.community_summaries = new_summaries
+                app.state.entity_info = new_entity_info
+                app.state.summaries_loaded = new_summaries_loaded
 
             logger.info("GraphRAG engine reloaded successfully.")
         except Exception as reload_error:
