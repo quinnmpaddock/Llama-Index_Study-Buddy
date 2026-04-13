@@ -374,7 +374,7 @@ class GraphRAGQueryEngine(CustomQueryEngine):
             similarity_top_k=similarity_top_k
         ).retrieve(query_str)
 
-        enitites = set()
+        entities = set()
         pattern = r"^(\w+(?:\s+\w+)*)\s*->\s*([a-zA-Z\s]+?)\s*->\s*(\w+(?:\s+\w+)*)$"
 
         for node_with_score in nodes_retrieved:
@@ -384,10 +384,10 @@ class GraphRAGQueryEngine(CustomQueryEngine):
             for match in matches:
                 subject = match[0]
                 obj = match[2]
-                enitites.add(subject)
-                enitites.add(obj)
+                entities.add(subject)
+                entities.add(obj)
 
-        return list(enitites)
+        return list(entities)
 
     def retrieve_entity_communities(self, entity_info, entities):
         """
