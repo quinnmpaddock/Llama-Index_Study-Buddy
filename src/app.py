@@ -8,6 +8,7 @@ application lifecycle via the ``lifespan`` context manager.
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from dotenv import load_dotenv
@@ -30,8 +31,21 @@ from services.graph import GraphService
 from services.query import QueryService
 from services.ingestion import IngestionService
 
-# --- Models that live here for now (will move to models.py later) ---
-from models import QueryRequest, GraphQueryResponse
+# --- Workspace imports ---
+from workspace import WorkspaceRegistry
+
+# --- Models ---
+from models import (
+    QueryRequest,
+    GraphQueryResponse,
+    WorkspaceCreate,
+    WorkspaceInfo,
+    WorkspaceListResponse,
+    WorkspaceStatsResponse,
+)
+
+# --- Default workspace ID ---
+DEFAULT_WORKSPACE_ID = "default"
 
 
 class EntitySearchResponse(BaseModel):
@@ -207,6 +221,17 @@ async def lifespan(app: FastAPI):
         app.state.query_svc = query_svc
         app.state.ingestion_svc = ingestion_svc
 
+        # 7. Initialise WorkspaceRegistry and auto-create default workspace
+        data_dir = Path(os.environ.get(
+            "STUDY_BUDDY_DATA_DIR",
+            os.path.join(os.path.dirname(__file__), "..", "data"),
+        ))
+        workspace_registry = WorkspaceRegistry(data_dir=data_dir)
+        if workspace_registry.get(DEFAULT_WORKSPACE_ID) is None:
+            workspace_registry.create(name="Default", description="Default workspace (auto-created)")
+            logger.info("Auto-created default workspace")
+        app.state.workspace_registry = workspace_registry
+
         if not app.state.summaries_loaded:
             logger.warning(
                 "Started with empty knowledge graph. "
@@ -240,6 +265,376 @@ async def root():
     return {
         "message": "Study Buddy GraphRAG API is online. Go to /docs for Swagger UI."
     }
+
+
+# ============================================================
+# Workspace (Knowledge Base) Management Endpoints
+# ============================================================
+
+@app.post("/kb", response_model=WorkspaceInfo, status_code=201)
+async def create_workspace(request: WorkspaceCreate):
+    """Create a new knowledge base workspace."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    try:
+        ws = registry.create(name=request.name, description=request.description)
+        return WorkspaceInfo(
+            id=ws.id,
+            name=ws.name,
+            description=ws.description,
+            neo4j_database=ws.neo4j_database,
+            created_at=ws.created_at,
+            updated_at=ws.updated_at,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@app.get("/kb", response_model=WorkspaceListResponse)
+async def list_workspaces():
+    """List all workspaces."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    workspaces = registry.list()
+    return WorkspaceListResponse(
+        workspaces=[
+            WorkspaceInfo(
+                id=ws.id, name=ws.name, description=ws.description,
+                neo4j_database=ws.neo4j_database, created_at=ws.created_at,
+                updated_at=ws.updated_at,
+            )
+            for ws in workspaces
+        ],
+        total=len(workspaces),
+    )
+
+
+@app.get("/kb/{workspace_id}", response_model=WorkspaceInfo)
+async def get_workspace(workspace_id: str):
+    """Get workspace details."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+    return WorkspaceInfo(
+        id=ws.id, name=ws.name, description=ws.description,
+        neo4j_database=ws.neo4j_database, created_at=ws.created_at,
+        updated_at=ws.updated_at,
+    )
+
+
+@app.delete("/kb/{workspace_id}")
+async def delete_workspace(workspace_id: str):
+    """Delete a workspace and its data directory.
+
+    Does NOT drop the Neo4j database — that must be done separately.
+    """
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    if workspace_id == DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=403, detail="Cannot delete the default workspace")
+    if not registry.delete(workspace_id):
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+    return {"status": "deleted", "workspace_id": workspace_id}
+
+
+# ============================================================
+# Workspace-scoped endpoints (/kb/{workspace_id}/...)
+# ============================================================
+
+@app.post("/kb/{workspace_id}/query", response_model=GraphQueryResponse)
+async def query_workspace(workspace_id: str, request: QueryRequest):
+    """Query a specific workspace's knowledge graph."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    # Currently only the default workspace has a loaded engine
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(
+            status_code=501,
+            detail="Multi-workspace querying not yet implemented. Use the default workspace.",
+        )
+
+    if not hasattr(app.state, "engine"):
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    if not getattr(app.state, "summaries_loaded", False):
+        raise HTTPException(status_code=503, detail="No data ingested")
+
+    try:
+        app.state.engine.similarity_top_k = request.similarity_top_k
+        response = await app.state.engine.acustom_query(request.query)
+        return QueryService.format_response(response)
+    except Exception as e:
+        logger.error("Query error for workspace %s: %s", workspace_id, str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/kb/{workspace_id}/ingest", response_model=IngestResponse)
+async def ingest_workspace(
+    workspace_id: str,
+    request: IngestRequest,
+    background_tasks: BackgroundTasks,
+):
+    """Ingest documents into a specific workspace."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(
+            status_code=501,
+            detail="Multi-workspace ingestion not yet implemented. Use the default workspace.",
+        )
+
+    svc: IngestionService = app.state.ingestion_svc
+    try:
+        task_id, response_data = svc.start_ingestion(
+            directory=request.directory,
+            files=request.files,
+        )
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        if isinstance(exc, FileNotFoundError):
+            raise HTTPException(status_code=400, detail=str(exc))
+        if isinstance(exc, RuntimeError):
+            raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if not task_id:
+        return IngestResponse(**response_data)
+
+    background_tasks.add_task(
+        svc.run_ingestion,
+        str(request.directory),
+        [str(f) for f in (request.files or [])] if request.files else [],
+        task_id,
+    )
+    return IngestResponse(**response_data)
+
+
+@app.get("/kb/{workspace_id}/entities", response_model=EntitySearchResponse)
+async def search_workspace_entities(
+    workspace_id: str,
+    q: Optional[str] = Query(None, description="Search term for entity names"),
+    limit: int = Query(50, ge=1, le=200, description="Maximum results to return"),
+):
+    """Search for entities in a specific workspace's knowledge graph."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
+
+    if not hasattr(app.state, "entity_info"):
+        raise HTTPException(status_code=503, detail="Entity info not loaded")
+
+    return app.state.graph_svc.search_entities(query=q, limit=limit)
+
+
+@app.get("/kb/{workspace_id}/entities/{name}", response_model=EntityDetail)
+async def get_workspace_entity(workspace_id: str, name: str):
+    """Get details for a specific entity by name in a workspace."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
+
+    if not hasattr(app.state, "entity_info"):
+        raise HTTPException(status_code=503, detail="Entity info not loaded")
+
+    result = app.state.graph_svc.get_entity(name=name)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Entity '{name}' not found")
+    return result
+
+
+@app.get("/kb/{workspace_id}/communities", response_model=CommunityListResponse)
+async def list_workspace_communities(workspace_id: str):
+    """List all communities in a specific workspace."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
+
+    if not hasattr(app.state, "community_summaries"):
+        raise HTTPException(status_code=503, detail="Community summaries not loaded")
+
+    return app.state.graph_svc.list_communities()
+
+
+@app.get("/kb/{workspace_id}/communities/{id}", response_model=CommunityDetail)
+async def get_workspace_community(workspace_id: str, id: int):
+    """Get details for a specific community in a workspace."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
+
+    if not hasattr(app.state, "community_summaries"):
+        raise HTTPException(status_code=503, detail="Community summaries not loaded")
+
+    result = app.state.graph_svc.get_community(id=id)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Community {id} not found")
+    return result
+
+
+@app.get("/kb/{workspace_id}/communities/{id}/entities", response_model=CommunityEntitiesResponse)
+async def get_workspace_community_entities(workspace_id: str, id: int):
+    """Get all entities belonging to a specific community in a workspace."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
+
+    if not hasattr(app.state, "community_summaries"):
+        raise HTTPException(status_code=503, detail="Community summaries not loaded")
+
+    result = app.state.graph_svc.get_community_entities(id=id)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Community {id} not found")
+    return result
+
+
+@app.get("/kb/{workspace_id}/ingest/status/{task_id}")
+async def get_workspace_ingestion_status(workspace_id: str, task_id: str):
+    """Get the status of a background ingestion task in a workspace."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
+
+    svc: IngestionService = app.state.ingestion_svc
+    status = svc.get_status(task_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return status
+
+
+@app.get("/kb/{workspace_id}/ingest/preview")
+async def preview_workspace_ingest(
+    workspace_id: str,
+    directory: str = Query(..., description="Directory path to preview"),
+):
+    """Preview what files would be ingested from a directory for a workspace."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
+
+    try:
+        return IngestionService.preview_directory(directory)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/kb/{workspace_id}/summaries", response_model=SummaryListResponse)
+async def list_workspace_summaries(workspace_id: str):
+    """List all available summary versions for a workspace."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
+
+    svc: CommunityService = app.state.community_svc
+    current, versions = svc.list_versions()
+    current_version = SummaryVersion(**current) if current else None
+    return SummaryListResponse(current=current_version, versions=versions)
+
+
+@app.get("/kb/{workspace_id}/summaries/current")
+async def get_workspace_current_summary(workspace_id: str):
+    """Get the current (active) summary version info for a workspace."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
+
+    svc: CommunityService = app.state.community_svc
+    data = svc.get_current_version()
+    if data is None:
+        raise HTTPException(status_code=404, detail="No current summary version found")
+    return data
+
+
+@app.get("/kb/{workspace_id}/summaries/{version}")
+async def get_workspace_summary_version(workspace_id: str, version: str):
+    """Get a specific summary version's content for a workspace."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
+
+    svc: CommunityService = app.state.community_svc
+    data = svc.get_version(version)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"Summary version '{version}' not found")
+    return data
+
+
+@app.delete("/kb/{workspace_id}/summaries", response_model=SummaryCleanupResponse)
+async def cleanup_workspace_summaries(
+    workspace_id: str,
+    keep: int = Query(5, description="Number of versions to keep"),
+):
+    """Delete old summary versions for a workspace, keeping the N most recent."""
+    registry: WorkspaceRegistry = app.state.workspace_registry
+    ws = registry.get(workspace_id)
+    if ws is None:
+        raise HTTPException(status_code=404, detail=f"Workspace '{workspace_id}' not found")
+
+    if workspace_id != DEFAULT_WORKSPACE_ID:
+        raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
+
+    if keep < 1:
+        raise HTTPException(status_code=400, detail="Must keep at least 1 version")
+
+    svc: CommunityService = app.state.community_svc
+    try:
+        deleted, kept = svc.cleanup_versions(keep=keep)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return SummaryCleanupResponse(
+        deleted=deleted,
+        kept=kept,
+        message=f"Deleted {len(deleted) // 2} version(s), keeping {len(kept)} version(s)",
+    )
+
+
+# ============================================================
+# Legacy Endpoints (default workspace — unchanged)
+# ============================================================
 
 
 # --- Query Endpoint ---
