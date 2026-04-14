@@ -17,14 +17,25 @@ def neo4j_db_name(workspace_id: str) -> str:
     """Convert a workspace ID to a valid Neo4j database name.
     
     Neo4j database names: alphanumeric + underscore, 3-63 chars, must start with letter.
-    We prefix with 'sb_' to namespace and replace hyphens with underscores.
-    
-    Examples:
-        "ml-research" -> "sb_ml_research"
-        "bio" -> "sb_bio"
+    We prefix with 'sb_' to namespace, replace hyphens with underscores, and append
+    a short hash to prevent collisions from truncation.
     """
-    db_name = "sb_" + workspace_id.replace("-", "_")
-    return db_name[:63]
+    import hashlib
+    import re
+    
+    sanitized = workspace_id.replace("-", "_")
+    sanitized = re.sub(r"[^a-zA-Z0-9_]", "", sanitized)
+    
+    hash_suffix = hashlib.sha256(workspace_id.encode()).hexdigest()[:8]
+    
+    prefix = "sb_"
+    hash_part = "_" + hash_suffix
+    
+    max_sanitized_len = 63 - len(prefix) - len(hash_part)
+    if len(sanitized) > max_sanitized_len:
+        sanitized = sanitized[:max_sanitized_len]
+    
+    return prefix + sanitized + hash_part
 
 
 @dataclass

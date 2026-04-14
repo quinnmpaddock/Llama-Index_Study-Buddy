@@ -91,7 +91,7 @@ def test_create_workspace(client):
     assert data["id"] == "biology"
     assert data["name"] == "Biology"
     assert data["description"] == "Bio notes"
-    assert data["neo4j_database"] == "sb_biology"
+    assert data["neo4j_database"].startswith("sb_biology_")
 
 
 def test_create_workspace_duplicate_returns_409(client):
