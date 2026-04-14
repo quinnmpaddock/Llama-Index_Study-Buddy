@@ -1,0 +1,1 @@
+# Service layer extracted from app.py for modular architecture.
