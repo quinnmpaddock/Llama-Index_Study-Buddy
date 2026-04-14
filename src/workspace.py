@@ -2,6 +2,8 @@
 import json
 import logging
 import os
+import tempfile
+import threading
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -76,6 +78,7 @@ class WorkspaceRegistry:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self._registry_path = self.data_dir / "workspaces.json"
+        self._lock = threading.Lock()
         self._workspaces: Dict[str, Workspace] = self._load()
 
     def _load(self) -> Dict[str, Workspace]:
@@ -94,10 +97,21 @@ class WorkspaceRegistry:
             return {}
 
     def _save(self):
-        """Persist workspaces to the registry file."""
+        """Persist workspaces to the registry file atomically."""
         data = {ws_id: ws.to_dict() for ws_id, ws in self._workspaces.items()}
-        with open(self._registry_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        fd, tmp_path = tempfile.mkstemp(
+            dir=self._registry_path.parent, suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp_path, self._registry_path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def create(self, name: str, description: str = "") -> Workspace:
         """Create a new workspace.
@@ -111,36 +125,37 @@ class WorkspaceRegistry:
             ValueError: If a workspace with the derived slug already exists.
         """
         workspace_id = slugify(name)
-        if workspace_id in self._workspaces:
-            raise ValueError(f"Workspace '{workspace_id}' already exists")
+        
+        with self._lock:
+            if workspace_id in self._workspaces:
+                raise ValueError(f"Workspace '{workspace_id}' already exists")
 
-        now = datetime.now(timezone.utc).isoformat()
-        workspace = Workspace(
-            id=workspace_id,
-            name=name,
-            description=description,
-            neo4j_database=neo4j_db_name(workspace_id),
-            created_at=now,
-            updated_at=now,
-        )
-
-        # Create workspace data directory
-        ws_dir = self.data_dir / workspace_id
-        ws_dir.mkdir(parents=True, exist_ok=True)
-
-        # Write default workspace config
-        config_path = ws_dir / "config.yaml"
-        if not config_path.exists():
-            config_path.write_text(
-                f"# Workspace config overrides for '{name}'\n"
-                f"# Any field left commented out will use the global default.\n\n"
-                f"# llm_model: meta-llama/llama-4-scout-17b-16e-instruct\n"
-                f"# embedding_model: KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5\n"
-                f"# max_paths_per_chunk: 2\n"
+            now = datetime.now(timezone.utc).isoformat()
+            workspace = Workspace(
+                id=workspace_id,
+                name=name,
+                description=description,
+                neo4j_database=neo4j_db_name(workspace_id),
+                created_at=now,
+                updated_at=now,
             )
 
-        self._workspaces[workspace_id] = workspace
-        self._save()
+            ws_dir = self.data_dir / workspace_id
+            ws_dir.mkdir(parents=True, exist_ok=True)
+
+            config_path = ws_dir / "config.yaml"
+            if not config_path.exists():
+                config_path.write_text(
+                    f"# Workspace config overrides for '{name}'\n"
+                    f"# Any field left commented out will use the global default.\n\n"
+                    f"# llm_model: meta-llama/llama-4-scout-17b-16e-instruct\n"
+                    f"# embedding_model: KaLM-Embedding/KaLM-embedding-multilingual-mini-instruct-v2.5\n"
+                    f"# max_paths_per_chunk: 2\n"
+                )
+
+            self._workspaces[workspace_id] = workspace
+            self._save()
+        
         logger.info("Created workspace '%s' (id=%s)", name, workspace_id)
         return workspace
 
@@ -159,17 +174,18 @@ class WorkspaceRegistry:
         Does NOT drop the Neo4j database (that must be done separately).
         Returns True if deleted, False if not found.
         """
-        if workspace_id not in self._workspaces:
-            return False
+        with self._lock:
+            if workspace_id not in self._workspaces:
+                return False
 
-        # Remove workspace data directory
-        ws_dir = self.data_dir / workspace_id
-        if ws_dir.exists():
-            import shutil
-            shutil.rmtree(ws_dir)
+            ws_dir = self.data_dir / workspace_id
+            if ws_dir.exists():
+                import shutil
+                shutil.rmtree(ws_dir)
 
-        del self._workspaces[workspace_id]
-        self._save()
+            del self._workspaces[workspace_id]
+            self._save()
+        
         logger.info("Deleted workspace '%s'", workspace_id)
         return True
 
