@@ -8,6 +8,8 @@ from typing import (Any, Callable, Dict, List, LiteralString, Optional, Union,
                     cast)
 
 # Backward compatibility — these classes now live in src.core modules
+from core.extractor import GraphRAGExtractor  # noqa: F401 — re-export
+
 warnings.warn(
     "Importing from core_classes is deprecated. Use core.store and core.extractor.",
     DeprecationWarning,
