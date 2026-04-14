@@ -440,8 +440,8 @@ async def query_workspace(workspace_id: str, request: QueryRequest):
         response = await app.state.engine.acustom_query(request.query, similarity_top_k=request.similarity_top_k)
         return QueryService.format_response(response)
     except Exception as e:
-        logger.error("Query error for workspace %s: %s", workspace_id, str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Query error for workspace %s", workspace_id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/kb/{workspace_id}/ingest", response_model=IngestResponse)
@@ -730,8 +730,8 @@ async def query_graph(request: QueryRequest):
         response = await app.state.engine.acustom_query(request.query, similarity_top_k=request.similarity_top_k)
         return QueryService.format_response(response)
     except Exception as e:
-        logger.error("Query error: %s", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Query error")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # --- Entity Endpoints ---
