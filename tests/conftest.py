@@ -1,0 +1,54 @@
+"""Shared test fixtures for study-buddy tests."""
+import os
+import pytest
+from pathlib import Path
+
+# Test data directory
+TESTS_DIR = Path(__file__).parent
+FIXTURES_DIR = TESTS_DIR / "fixtures"
+
+
+@pytest.fixture
+def tmp_data_dir(tmp_path):
+    """Provide a temporary data directory for workspace tests."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    return data_dir
+
+
+@pytest.fixture
+def sample_workspace_config():
+    """Provide a sample workspace config dict for tests."""
+    return {
+        "llm": {"model": "test-model"},
+        "embedding": {"model": "test-embedding"},
+        "graphrag": {"max_paths_per_chunk": 5},
+    }
+
+
+@pytest.fixture
+def mock_config(tmp_path):
+    """Provide a mock Config object for tests that don't need real Neo4j/LLM."""
+    # Create a minimal config file
+    config_file = tmp_path / "test_study_buddy.yaml"
+    config_file.write_text("""
+llm:
+  model: "test-model"
+  api_base: "https://api.test.com/v1"
+embedding:
+  model: "test-embedding-model"
+neo4j:
+  url: "bolt://localhost:7687"
+  username: "neo4j"
+  password: "test-password"
+server:
+  port: 8000
+  host: "127.0.0.1"
+  log_level: "WARNING"
+graphrag:
+  max_paths_per_chunk: 2
+  extraction_prompt: "kg_extract_template.txt"
+docker:
+  container_name: "neo4j-test"
+""")
+    return str(config_file)
