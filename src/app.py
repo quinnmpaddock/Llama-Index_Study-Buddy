@@ -80,7 +80,7 @@ def _migrate_data_dir(old_dir: Path, new_dir: Path) -> None:
         logger.info("App data migration complete (old data/ now belongs to Neo4j only)")
 
 
-def _migrate_legacy_summaries(data_dir: Path) -> None:
+def _migrate_legacy_summaries(data_dir: Path, _legacy_dir: Optional[Path] = None) -> None:
     """One-time migration: copy files from legacy summaries/ to data/default/summaries/.
 
     If data/default/summaries/ doesn't exist or is empty but summaries/ does,
@@ -89,7 +89,10 @@ def _migrate_legacy_summaries(data_dir: Path) -> None:
     """
     import shutil
 
-    legacy_dir = Path(os.path.dirname(os.path.abspath(__file__))) / ".." / "summaries"
+    if _legacy_dir is None:
+        legacy_dir = Path(os.path.dirname(os.path.abspath(__file__))) / ".." / "summaries"
+    else:
+        legacy_dir = _legacy_dir
     target_dir = data_dir / "default" / "summaries"
 
     if target_dir.exists() and any(target_dir.iterdir()):

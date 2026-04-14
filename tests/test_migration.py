@@ -23,7 +23,6 @@ class TestMigrateLegacySummaries:
 
     def test_migrate_copies_files_when_target_empty(self, tmp_path):
         """Legacy summaries/ files are copied to data/default/summaries/."""
-        from unittest.mock import patch
         from app import _migrate_legacy_summaries
 
         # Create a fake legacy summaries directory
@@ -44,16 +43,8 @@ class TestMigrateLegacySummaries:
             json.dumps({"version": "2026-04-08_150308"})
         )
 
-        import os
-        original_abspath = os.path.abspath
-
-        def mock_abspath(path):
-            if path.endswith("app.py"):
-                return str(tmp_path / "src" / "app.py")
-            return original_abspath(path)
-
-        with patch("os.path.abspath", side_effect=mock_abspath):
-            _migrate_legacy_summaries(data_dir=data_dir)
+        # Call migration with explicit legacy_dir (avoids hardcoded path resolution)
+        _migrate_legacy_summaries(data_dir=data_dir, _legacy_dir=legacy_dir)
 
         # Verify migration happened
         target_summaries = data_dir / "default" / "summaries"
@@ -68,7 +59,6 @@ class TestMigrateLegacySummaries:
 
     def test_migrate_skips_when_target_has_data(self, tmp_path):
         """Migration should be skipped when target already has data."""
-        from unittest.mock import patch
         from app import _migrate_legacy_summaries
 
         # Create target data directory with existing data
@@ -82,16 +72,7 @@ class TestMigrateLegacySummaries:
         legacy_dir.mkdir(parents=True)
         (legacy_dir / "other_file.json").write_text("{}")
 
-        import os
-        original_abspath = os.path.abspath
-
-        def mock_abspath(path):
-            if path.endswith("app.py"):
-                return str(tmp_path / "src" / "app.py")
-            return original_abspath(path)
-
-        with patch("os.path.abspath", side_effect=mock_abspath):
-            _migrate_legacy_summaries(data_dir=data_dir)
+        _migrate_legacy_summaries(data_dir=data_dir, _legacy_dir=legacy_dir)
 
         # Target should still have only the original file (migration skipped)
         files_after = list(target_summaries.iterdir())
