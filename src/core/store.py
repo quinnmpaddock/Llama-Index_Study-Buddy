@@ -227,7 +227,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         if self.data_dir:
             d = Path(self.data_dir) / (self.workspace_id or "default") / "summaries"
         else:
-            d = Path(os.path.dirname(os.path.abspath(__file__))) / ".." / ".." / "summaries"
+            d = Path(os.path.dirname(os.path.abspath(__file__))) / ".." / ".." / (self.workspace_id or "default") / "summaries"
         d.mkdir(parents=True, exist_ok=True)
         return d
 
