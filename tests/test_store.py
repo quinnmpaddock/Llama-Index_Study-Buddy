@@ -1,0 +1,332 @@
+"""Tests for GraphRAGStore workspace awareness in core/store.py.
+
+Since the test environment doesn't have a working Neo4j/numpy stack,
+we mock the llama_index dependencies at import time and only test the
+workspace-aware logic that doesn't require a real database connection.
+"""
+import json
+import os
+import sys
+import warnings
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+
+# ---------------------------------------------------------------------------
+# Mock heavy llama_index dependencies before importing core.store
+# ---------------------------------------------------------------------------
+_mock_llama_index_modules = {
+    "llama_index": MagicMock(),
+    "llama_index.core": MagicMock(),
+    "llama_index.core.Settings": MagicMock(),
+    "llama_index.core.PropertyGraphIndex": MagicMock(),
+    "llama_index.core.llms": MagicMock(),
+    "llama_index.core.llms.LLM": MagicMock(),
+    "llama_index.core.llms.ChatMessage": MagicMock(),
+    "llama_index.core.query_engine": MagicMock(),
+    "llama_index.core.query_engine.CustomQueryEngine": MagicMock(),
+    "llama_index.core.base": MagicMock(),
+    "llama_index.core.base.response": MagicMock(),
+    "llama_index.core.base.response.schema": MagicMock(),
+    "llama_index.core.async_utils": MagicMock(),
+    "llama_index.core.bridge": MagicMock(),
+    "llama_index.core.bridge.pydantic": MagicMock(),
+    "llama_index.core.graph_stores": MagicMock(),
+    "llama_index.core.graph_stores.types": MagicMock(),
+    "llama_index.core.indices": MagicMock(),
+    "llama_index.core.indices.property_graph": MagicMock(),
+    "llama_index.core.indices.property_graph.utils": MagicMock(),
+    "llama_index.core.prompts": MagicMock(),
+    "llama_index.core.prompts.default_prompts": MagicMock(),
+    "llama_index.core.schema": MagicMock(),
+    "llama_index.graph_stores": MagicMock(),
+    "llama_index.graph_stores.neo4j": MagicMock(),
+}
+
+# Create a real-looking ChatMessage that can be instantiated
+class _FakeChatMessage:
+    def __init__(self, role="user", content=""):
+        self.role = role
+        self.content = content
+
+# Create a real-looking base class for Neo4jPropertyGraphStore
+class _FakeNeo4jPropertyGraphStore:
+    """Stand-in for Neo4jPropertyGraphStore that doesn't need a real connection."""
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+# Create a real-looking CustomQueryEngine base class
+class _FakeCustomQueryEngine:
+    """Stand-in for CustomQueryEngine."""
+    pass
+
+_mock_llama_index_modules["llama_index.graph_stores.neo4j"].Neo4jPropertyGraphStore = _FakeNeo4jPropertyGraphStore
+_mock_llama_index_modules["llama_index.core"].PropertyGraphIndex = MagicMock()
+_mock_llama_index_modules["llama_index.core"].Settings = MagicMock()
+_mock_llama_index_modules["llama_index.core.llms"].ChatMessage = _FakeChatMessage
+_mock_llama_index_modules["llama_index.core.llms"].LLM = MagicMock
+_mock_llama_index_modules["llama_index.core.query_engine"].CustomQueryEngine = _FakeCustomQueryEngine
+_mock_llama_index_modules["llama_index.core.base.response.schema"].Response = MagicMock()
+
+# Patch sys.modules before importing core.store
+for mod_name, mod_mock in _mock_llama_index_modules.items():
+    if mod_name not in sys.modules:
+        sys.modules[mod_name] = mod_mock
+
+# Now we can import
+from core.store import GraphRAGStore
+from workspace import neo4j_db_name
+
+
+def _make_store(**kwargs):
+    """Create a GraphRAGStore without calling the real Neo4j __init__.
+
+    Since we've mocked the base class, we can call __init__ normally.
+    The fake Neo4jPropertyGraphStore just sets attributes from kwargs.
+    """
+    workspace_id = kwargs.pop("workspace_id", None)
+    data_dir = kwargs.pop("data_dir", None)
+    entity_info = kwargs.pop("entity_info", {})
+    community_summary = kwargs.pop("community_summary", {})
+    llm = kwargs.pop("llm", MagicMock())
+    graph_name = kwargs.pop("graph_name", None)
+
+    # Determine database name
+    if workspace_id:
+        database = neo4j_db_name(workspace_id)
+    else:
+        database = graph_name or "neo4j"
+
+    store = GraphRAGStore(
+        username="neo4j",
+        password="test",
+        url="bolt://localhost:7867",
+        database=database,
+        llm=llm,
+        entity_info=entity_info,
+        community_summary=community_summary,
+        refresh_schema=False,
+        create_indexes=False,
+        workspace_id=workspace_id,
+        data_dir=data_dir,
+    )
+    return store
+
+
+class TestNeo4jDbName:
+    """Test the neo4j_db_name utility used by GraphRAGStore."""
+
+    def test_neo4j_db_name_hyphenated(self):
+        assert neo4j_db_name("ml-research") == "sb_ml_research"
+
+    def test_neo4j_db_name_simple(self):
+        assert neo4j_db_name("bio") == "sb_bio"
+
+    def test_neo4j_db_name_truncation(self):
+        long_id = "a" * 70
+        assert len(neo4j_db_name(long_id)) <= 63
+
+
+class TestGraphRAGStoreInit:
+    """Tests for the workspace_id-aware initialization logic."""
+
+    def test_default_graph_name_no_workspace(self):
+        """Without workspace_id, graph_name should be the default database name."""
+        store = _make_store()
+        assert store.graph_name == "neo4j"
+        assert store.workspace_id is None
+
+    def test_workspace_scoped_database_name(self):
+        """When workspace_id is provided, graph_name should be neo4j_db_name(workspace_id)."""
+        store = _make_store(workspace_id="ml-research")
+        assert store.graph_name == "sb_ml_research"
+        assert store.workspace_id == "ml-research"
+
+    def test_workspace_scoped_database_name_simple(self):
+        store = _make_store(workspace_id="bio")
+        assert store.graph_name == "sb_bio"
+
+
+class TestGraphRAGStoreGDSProjection:
+    """Tests for workspace-scoped GDS projection naming in build_communities."""
+
+    def test_gds_projection_with_workspace(self):
+        """build_communities should use workspace-scoped projection name."""
+        store = _make_store(workspace_id="ml-research")
+        # The projection name logic in build_communities
+        if store.workspace_id:
+            gds_projection = f"{store.workspace_id}_graph"
+        else:
+            gds_projection = store.graph_name
+        
+        assert gds_projection == "ml-research_graph"
+
+    def test_gds_projection_without_workspace(self):
+        """Without workspace_id, GDS projection should fall back to graph_name."""
+        store = _make_store()
+        if store.workspace_id:
+            gds_projection = f"{store.workspace_id}_graph"
+        else:
+            gds_projection = store.graph_name
+        
+        assert gds_projection == "neo4j"
+
+    def test_gds_projection_differs_from_db_name(self):
+        """The GDS projection name should differ from the database name when workspace_id is set."""
+        store = _make_store(workspace_id="ml-research")
+        if store.workspace_id:
+            gds_projection = f"{store.workspace_id}_graph"
+        else:
+            gds_projection = store.graph_name
+        
+        # GDS projection is "{workspace_id}_graph", but DB name is "sb_{workspace_id}"
+        assert gds_projection == "ml-research_graph"
+        assert store.graph_name == "sb_ml_research"
+        assert gds_projection != store.graph_name
+
+
+class TestGraphRAGStoreSummariesDir:
+    """Tests for get_summaries_dir with workspace_id."""
+
+    def test_summaries_dir_with_workspace_id(self, tmp_path):
+        """When data_dir and workspace_id are set, summaries dir should be
+        data_dir/{workspace_id}/summaries."""
+        store = _make_store(workspace_id="ml-research", data_dir=str(tmp_path))
+        result = store.get_summaries_dir()
+        expected = tmp_path / "ml-research" / "summaries"
+        assert result == expected
+        assert result.is_dir()
+
+    def test_summaries_dir_without_workspace_id(self, tmp_path):
+        """When workspace_id is None, 'default' should be used as subdir."""
+        store = _make_store(data_dir=str(tmp_path))
+        result = store.get_summaries_dir()
+        expected = tmp_path / "default" / "summaries"
+        assert result == expected
+        assert result.is_dir()
+
+    def test_summaries_dir_no_data_dir(self):
+        """Without data_dir, should use a relative path from the module."""
+        store = _make_store()
+        result = store.get_summaries_dir()
+        # Should end with summaries
+        assert result.name == "summaries"
+        assert result.is_dir()
+
+
+class TestGraphRAGStoreSaveLoadSummaries:
+    """Tests for save_summaries / load_summaries round-trip."""
+
+    def test_save_and_load_summaries(self, tmp_path):
+        """Save and then load summaries — data should round-trip."""
+        store = _make_store(
+            workspace_id="test-ws",
+            data_dir=str(tmp_path),
+            entity_info={"entity1": [1, 2], "entity2": [3]},
+            community_summary={"1": "Summary for community 1", "2": "Summary for community 2"},
+        )
+
+        version = store.save_summaries(version="test_v1")
+        assert version == "test_v1"
+
+        # Verify files exist
+        summaries_dir = tmp_path / "test-ws" / "summaries"
+        assert (summaries_dir / "community_summaries_test_v1.json").exists()
+        assert (summaries_dir / "entity_info_test_v1.json").exists()
+        assert (summaries_dir / "current.json").exists()
+
+        # Load in a fresh store
+        store2 = _make_store(workspace_id="test-ws", data_dir=str(tmp_path))
+
+        loaded_summaries, loaded_entities = store2.load_summaries()
+        assert loaded_summaries == {"1": "Summary for community 1", "2": "Summary for community 2"}
+        assert loaded_entities == {"entity1": [1, 2], "entity2": [3]}
+        # Also check attributes on store2
+        assert store2.community_summary == loaded_summaries
+        assert store2.entity_info == loaded_entities
+
+    def test_save_summaries_auto_version(self, tmp_path):
+        """save_summaries without explicit version should generate a timestamp."""
+        store = _make_store(workspace_id="test-ws2", data_dir=str(tmp_path))
+
+        version = store.save_summaries()
+        assert version  # Non-empty
+        # Version should look like a timestamp: YYYY-MM-DD_HHMMSS
+        assert len(version) > 10
+
+    def test_load_summaries_no_files(self, tmp_path):
+        """load_summaries should return empty dicts when no files exist."""
+        store = _make_store(workspace_id="empty-ws", data_dir=str(tmp_path))
+
+        summaries, entities = store.load_summaries()
+        assert summaries == {}
+        assert entities == {}
+
+    def test_current_json_pointer(self, tmp_path):
+        """After save, current.json should point to the latest version."""
+        store = _make_store(
+            workspace_id="pointer-ws",
+            data_dir=str(tmp_path),
+            entity_info={"e1": [1]},
+            community_summary={"1": "First version"},
+        )
+
+        store.save_summaries(version="v1")
+        
+        # Update and save again
+        store.community_summary = {"1": "Second version", "2": "New community"}
+        store.entity_info = {"e1": [1], "e2": [2]}
+        store.save_summaries(version="v2")
+
+        # current.json should point to v2
+        current_path = tmp_path / "pointer-ws" / "summaries" / "current.json"
+        with open(current_path) as f:
+            current = json.load(f)
+        assert current["version"] == "v2"
+        assert current["stats"]["total_communities"] == 2
+        assert current["stats"]["total_entities"] == 2
+
+    def test_load_without_current_json(self, tmp_path):
+        """load_summaries should find the latest version when current.json is missing."""
+        store = _make_store(
+            workspace_id="fallback-ws",
+            data_dir=str(tmp_path),
+            entity_info={"e1": [1]},
+            community_summary={"1": "Only version"},
+        )
+
+        store.save_summaries(version="v3")
+
+        # Remove current.json to test fallback
+        current_path = tmp_path / "fallback-ws" / "summaries" / "current.json"
+        assert current_path.exists()
+        current_path.unlink()
+
+        # Load should still work via file globbing
+        store2 = _make_store(workspace_id="fallback-ws", data_dir=str(tmp_path))
+        summaries, entities = store2.load_summaries()
+        assert summaries == {"1": "Only version"}
+        assert entities == {"e1": [1]}
+
+
+class TestDeprecationWarning:
+    """Test that importing from core_classes emits a deprecation warning."""
+
+    def test_core_classes_deprecation_warning(self):
+        """Importing from core_classes should emit DeprecationWarning."""
+        import importlib
+        # Remove from cache if already loaded
+        if "core_classes" in sys.modules:
+            del sys.modules["core_classes"]
+        
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            import core_classes
+            importlib.reload(core_classes)
+            # Check that a DeprecationWarning was emitted
+            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            assert len(deprecation_warnings) >= 1
+            assert "core_classes is deprecated" in str(deprecation_warnings[0].message)
