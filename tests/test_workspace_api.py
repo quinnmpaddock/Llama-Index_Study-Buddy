@@ -40,7 +40,11 @@ def client():
             app.state.graph_svc = MagicMock(spec=GraphService)
             app.state.query_svc = MagicMock(spec=QueryService)
             app.state.ingestion_svc = MagicMock(spec=IngestionService)
-            app.state.engine = MagicMock()
+            mock_response = MagicMock()
+            mock_response.response = "test answer"
+            mock_response.metadata = {"communities_consulted": [], "entities_found": []}
+            app.state.engine = AsyncMock()
+            app.state.engine.acustom_query.return_value = mock_response
             app.state.summaries_loaded = True
             app.state.community_summaries = {}
             app.state.entity_info = {}
@@ -274,22 +278,20 @@ def test_communities_nonexistent_workspace_returns_404(client):
 
 def test_legacy_query_endpoint_reachable(client):
     """POST /query should still be reachable (not removed)."""
-    # It will fail with 503 because mocked engine can't really query,
-    # but it should NOT return 404
     resp = client.post("/query", json={"query": "test"})
-    assert resp.status_code != 404
+    assert resp.status_code == 200
 
 
 def test_legacy_entities_endpoint_reachable(client):
     """GET /entities should still be reachable."""
     resp = client.get("/entities")
-    assert resp.status_code != 404
+    assert resp.status_code == 200
 
 
 def test_legacy_communities_endpoint_reachable(client):
     """GET /communities should still be reachable."""
     resp = client.get("/communities")
-    assert resp.status_code != 404
+    assert resp.status_code == 200
 
 
 def test_root_still_works(client):
