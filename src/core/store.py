@@ -1,189 +1,36 @@
+"""GraphRAGStore and GraphRAGQueryEngine — workspace-aware graph storage and querying.
+
+Extracted from core_classes.py to support multi-workspace Neo4j databases
+and per-workspace community summary persistence.
+"""
+
 import asyncio
 import json
 import logging
+import os
 import re
-import warnings
 from collections import defaultdict
-from typing import (Any, Callable, Dict, List, LiteralString, Optional, Union,
-                    cast)
-
-# Backward compatibility — these classes now live in src.core modules
-warnings.warn(
-    "Importing from core_classes is deprecated. Use core.store and core.extractor.",
-    DeprecationWarning,
-    stacklevel=2,
-)
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, LiteralString, Optional, Union, cast
 
 from llama_index.core import PropertyGraphIndex, Settings
-from llama_index.core.async_utils import run_jobs
 from llama_index.core.base.response.schema import Response
-from llama_index.core.bridge.pydantic import BaseModel, Field
-from llama_index.core.graph_stores.types import (KG_NODES_KEY,
-                                                 KG_RELATIONS_KEY, EntityNode,
-                                                 Relation)
-from llama_index.core.indices.property_graph.utils import \
-    default_parse_triplets_fn
 from llama_index.core.llms import LLM, ChatMessage
-from llama_index.core.prompts import PromptTemplate
-from llama_index.core.prompts.default_prompts import \
-    DEFAULT_KG_TRIPLET_EXTRACT_PROMPT
 from llama_index.core.query_engine import CustomQueryEngine
-from llama_index.core.schema import BaseNode, TransformComponent
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
-
-# import networkx as nx
 
 logger = logging.getLogger(__name__)
 
 
-class GraphQueryResponse(BaseModel):
-    """to enforce structured metadata returns"""
+class GraphRAGStore(Neo4jPropertyGraphStore):
+    """Neo4j-backed property graph store with workspace-aware community detection.
 
-    answer: str
-    communities_consulted: List[Union[str, int]]
-    entities_found: List[str]
-
-
-class GraphRAGExtractor(TransformComponent):
-    """Extract triples from a graph.
-
-    Uses an LLM and a simple prompt + output parsing to extract paths (i.e. triples) and entity, relation descriptions from text.
-
-    Args:
-        llm (LLM):
-            The language model to use.
-        extract_prompt (Union[str, PromptTemplate]):
-            The prompt to use for extracting triples.
-        parse_fn (callable):
-            A function to parse the output of the language model.
-        num_workers (int):
-            The number of workers to use for parallel processing.
-        max_paths_per_chunk (int):
-            The maximum number of paths to extract per chunk.
+    When *workspace_id* is supplied, the store automatically uses a
+    workspace-scoped Neo4j database name (via ``workspace.neo4j_db_name``) and
+    scopes GDS projection names to avoid collisions between workspaces.
     """
 
-    llm: LLM
-    extract_prompt: PromptTemplate
-    parse_fn: Callable
-    num_workers: int
-    max_paths_per_chunk: int
-
-    def __init__(
-        self,
-        llm: Optional[LLM] = None,
-        extract_prompt: Optional[Union[str, PromptTemplate]] = None,
-        parse_fn: Callable = default_parse_triplets_fn,
-        max_paths_per_chunk: int = 10,
-        num_workers: int = 4,
-    ) -> None:
-        """Init params."""
-        # from llama_index.core import Settings
-
-        if isinstance(extract_prompt, str):
-            extract_prompt = PromptTemplate(extract_prompt)
-
-        super().__init__(
-            llm=llm or Settings.llm,
-            extract_prompt=extract_prompt or DEFAULT_KG_TRIPLET_EXTRACT_PROMPT,
-            parse_fn=parse_fn,
-            num_workers=num_workers,
-            max_paths_per_chunk=max_paths_per_chunk,
-        )
-
-    @classmethod
-    def class_name(cls) -> str:
-        return "GraphExtractor"
-
-    def __call__(
-        self, nodes: List[BaseNode], show_progress: bool = False, **kwargs: Any
-    ) -> List[BaseNode]:
-        """Extract triples from nodes."""
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-
-        if loop and loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, self.acall(nodes, show_progress=show_progress, **kwargs))
-                return future.result()
-        else:
-            return asyncio.run(self.acall(nodes, show_progress=show_progress, **kwargs))
-
-    async def _aextract(self, node: BaseNode) -> BaseNode:
-        """Extract triples from a node."""
-        assert hasattr(node, "text")
-
-        text = node.get_content(metadata_mode="llm")
-        try:
-            llm_response = await self.llm.apredict(
-                self.extract_prompt,
-                text=text,
-                max_knowledge_triplets=self.max_paths_per_chunk,
-            )
-        except Exception:
-            # LLM/network errors should propagate so the calling job can
-            # retry or fail visibly — don't swallow them here.
-            raise
-
-        try:
-            entities, entities_relationship = self.parse_fn(llm_response)
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as e:
-            # Only catch parse/format errors — malformed LLM output is
-            # expected occasionally and should degrade gracefully.
-            logger.warning("LLM extraction failed for node: %s: %s", type(e).__name__, e)
-            entities = []
-            entities_relationship = []
-
-        existing_nodes = node.metadata.pop(KG_NODES_KEY, [])
-        existing_relations = node.metadata.pop(KG_RELATIONS_KEY, [])
-        entity_metadata = node.metadata.copy()
-        for entity, entity_type, description in entities:
-            entity_metadata["entity_description"] = description
-            entity_node = EntityNode(
-                name=entity, label=entity_type, properties=entity_metadata
-            )
-            existing_nodes.append(entity_node)
-
-        relation_metadata = node.metadata.copy()
-        for triple in entities_relationship:
-            subj, obj, rel, description = triple
-            relation_metadata["relationship_description"] = description
-            rel_node = Relation(
-                label=rel,
-                source_id=subj,
-                target_id=obj,
-                properties=relation_metadata,
-            )
-
-            existing_relations.append(rel_node)
-
-        node.metadata[KG_NODES_KEY] = existing_nodes
-        node.metadata[KG_RELATIONS_KEY] = existing_relations
-        return node
-
-    async def acall(
-        self, nodes: List[BaseNode], show_progress: bool = False, **kwargs: Any
-    ) -> List[BaseNode]:
-        """Extract triples from nodes async."""
-        jobs = []
-        for node in nodes:
-            jobs.append(self._aextract(node))
-
-        return await run_jobs(
-            jobs,
-            workers=self.num_workers,
-            show_progress=show_progress,
-            desc="Extracting paths from text",
-        )
-
-
-class GraphRAGStore(Neo4jPropertyGraphStore):
-    # community_summary = {}
-    # entity_info = None
-    # max_cluster_size = 5
-    # graph_name = "neo4j"
     def __init__(
         self,
         username: Optional[str] = "neo4j",
@@ -196,8 +43,15 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         refresh_schema: bool = True,
         create_indexes: bool = True,
         timeout: Optional[float] = None,
+        workspace_id: Optional[str] = None,
+        data_dir: Optional[str] = None,
         **kwargs,
     ) -> None:
+        # If workspace_id provided, use it for the database name
+        if workspace_id:
+            from workspace import neo4j_db_name
+
+            database = neo4j_db_name(workspace_id)
 
         super().__init__(
             username=username,
@@ -210,14 +64,19 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             **kwargs,
         )
 
+        self.workspace_id = workspace_id
+        self.data_dir = data_dir
         self.llm = llm or Settings.llm
-        self.graph_name = database
+        self.graph_name = database  # This is the Neo4j database name
         self.entity_info = entity_info or {}
         self.community_summary = community_summary or {}
 
+    # ------------------------------------------------------------------
+    # Community summary generation
+    # ------------------------------------------------------------------
+
     def generate_community_summary(self, text):
         """Generate summary for a given text using an LLM."""
-        # print("constructing chat message to gnerate community summaries ...")
         messages = [
             ChatMessage(
                 role="system",
@@ -239,6 +98,10 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         logger.debug("Community summary response constructed")
         return clean_response
 
+    # ------------------------------------------------------------------
+    # Cypher helpers
+    # ------------------------------------------------------------------
+
     def _run_cypher(self, query: str, params: Dict[str, Any] | None = None):
         """Sends cypher commands to the neo4j database"""
         if params is None:
@@ -248,24 +111,25 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         )
         return [record.data() for record in records]
 
+    # ------------------------------------------------------------------
+    # Community building
+    # ------------------------------------------------------------------
+
     def build_communities(self):
-        """Builds communities from the graph and persists them to the neo4j database"""
-        # print("DEBUG: starting build_communitites")
-        # check for existing graph projection
-        # try:
-        #     self._run_cypher(
-        #         f"CALL gds.graph.drop('{self.graph_name}') YIELD graphName"
-        #     )
-        #     print(f"{self.graph_name} was found open and dropped from memory.")
-        # except Exception:
-        #     pass
+        """Builds communities from the graph and persists them to the neo4j database."""
+        # Use workspace-scoped projection name to avoid collisions
+        if self.workspace_id:
+            gds_projection = f"{self.workspace_id}_graph"
+        else:
+            gds_projection = self.graph_name  # backward compat
+
         try:
             # project the graph to memory
             self._run_cypher(
                 f"""
                 MATCH (n:__Entity__)-[r]->(m:__Entity__)
                 Return gds.graph.project(
-                    '{self.graph_name}',
+                    '{gds_projection}',
                     n,
                     m,
                     {{}},
@@ -274,12 +138,11 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                 )
             """
             )
-            # print("DEBUG: projection succeeded")
 
             # run leiden community detection and write to neo4j
             self._run_cypher(
                 f"""
-                CALL gds.leiden.write('{self.graph_name}', {{
+                CALL gds.leiden.write('{gds_projection}', {{
                     writeProperty: 'community_id',
                     randomSeed: 19,
                     includeIntermediateCommunities: false,
@@ -288,7 +151,6 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
                 YIELD communityCount
             """
             )
-            # print("DEBUG: leiden succeeded")
             self._collect_community_info()
         except Exception as e:
             logger.error("build_communities failed: %s: %s", type(e).__name__, e)
@@ -297,12 +159,12 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             # drop graph projection
             try:
                 self._run_cypher(
-                    f"CALL gds.graph.drop('{self.graph_name}', false) YIELD graphName"
+                    f"CALL gds.graph.drop('{gds_projection}', false) YIELD graphName"
                 )
             except Exception as e:
                 logger.debug(
                     "Could not drop GDS graph projection '%s': %s: %s",
-                    self.graph_name, type(e).__name__, e,
+                    gds_projection, type(e).__name__, e,
                 )
 
     def _collect_community_info(self):
@@ -355,6 +217,100 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         if not self.community_summary:
             self.build_communities()
         return self.community_summary
+
+    # ------------------------------------------------------------------
+    # Workspace-scoped summary persistence
+    # ------------------------------------------------------------------
+
+    def get_summaries_dir(self) -> Path:
+        """Return the directory for this workspace's summaries."""
+        if self.data_dir:
+            d = Path(self.data_dir) / (self.workspace_id or "default") / "summaries"
+        else:
+            d = Path(os.path.dirname(os.path.abspath(__file__))) / ".." / ".." / "summaries"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def save_summaries(self, version: Optional[str] = None) -> str:
+        """Save community summaries and entity info to disk.
+        Returns the version timestamp string."""
+        if version is None:
+            version = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+
+        summaries_dir = self.get_summaries_dir()
+
+        summary_path = summaries_dir / f"community_summaries_{version}.json"
+        with open(summary_path, "w", encoding="utf-8") as f:
+            json.dump(self.community_summary, f, indent=4)
+
+        entity_path = summaries_dir / f"entity_info_{version}.json"
+        with open(entity_path, "w", encoding="utf-8") as f:
+            json.dump(self.entity_info, f, indent=4)
+
+        # Update current.json pointer
+        current_path = summaries_dir / "current.json"
+        current_info = {
+            "version": version,
+            "created_at": datetime.now().isoformat(),
+            "files": {
+                "community_summaries": f"community_summaries_{version}.json",
+                "entity_info": f"entity_info_{version}.json",
+            },
+            "stats": {
+                "total_entities": len(self.entity_info),
+                "total_communities": len(self.community_summary),
+            },
+        }
+        with open(current_path, "w", encoding="utf-8") as f:
+            json.dump(current_info, f, indent=4)
+
+        return version
+
+    def load_summaries(self) -> tuple:
+        """Load community summaries and entity info from disk.
+        Returns (community_summaries, entity_info).
+
+        Reads from the version pointed to by current.json.
+        If current.json is missing, falls back to the most recent
+        community_summaries_*.json / entity_info_*.json files.
+        """
+        summaries_dir = self.get_summaries_dir()
+        current_path = summaries_dir / "current.json"
+
+        if current_path.exists():
+            with open(current_path, "r", encoding="utf-8") as f:
+                current_info = json.load(f)
+            version = current_info["version"]
+        else:
+            # Find most recent version files
+            summary_files = sorted(summaries_dir.glob("community_summaries_*.json"))
+            if not summary_files:
+                logger.warning("No saved summaries found in %s", summaries_dir)
+                return {}, {}
+            # Extract version from filename: community_summaries_{version}.json
+            latest = summary_files[-1]
+            version = latest.stem.replace("community_summaries_", "")
+
+        summary_path = summaries_dir / f"community_summaries_{version}.json"
+        entity_path = summaries_dir / f"entity_info_{version}.json"
+
+        community_summaries = {}
+        entity_info = {}
+
+        if summary_path.exists():
+            with open(summary_path, "r", encoding="utf-8") as f:
+                community_summaries = json.load(f)
+
+        if entity_path.exists():
+            with open(entity_path, "r", encoding="utf-8") as f:
+                entity_info = json.load(f)
+
+        if community_summaries:
+            self.community_summary = community_summaries
+        if entity_info:
+            self.entity_info = entity_info
+
+        return community_summaries, entity_info
 
 
 class GraphRAGQueryEngine(CustomQueryEngine):
@@ -527,7 +483,3 @@ class GraphRAGQueryEngine(CustomQueryEngine):
             r"^assistant:\s*", "", str(final_response)
         ).strip()
         return cleaned_final_response
-
-
-# Future todo: add GraphRAGSettings classes from pydantic BaseSettings to
-# organize env vars
