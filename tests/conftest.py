@@ -1,7 +1,16 @@
 """Shared test fixtures for study-buddy tests."""
 import os
+import sys
 import pytest
 from pathlib import Path
+
+# Add project root and src/ to sys.path so 'from src.models import ...' works
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_SRC_DIR = _PROJECT_ROOT / "src"
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 # Test data directory
 TESTS_DIR = Path(__file__).parent
