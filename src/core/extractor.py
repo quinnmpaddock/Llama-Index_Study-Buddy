@@ -15,7 +15,7 @@ from llama_index.core.indices.property_graph.utils import default_parse_triplets
 from llama_index.core.llms import LLM
 from llama_index.core.prompts import PromptTemplate
 from llama_index.core.prompts.default_prompts import DEFAULT_KG_TRIPLET_EXTRACT_PROMPT
-from llama_index.core.schema import BaseNode, TransformComponent
+from llama_index.core.schema import BaseNode, MetadataMode, TransformComponent
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class GraphRAGExtractor(TransformComponent):
         """Extract triples from a node."""
         assert hasattr(node, "text")
 
-        text = node.get_content(metadata_mode="llm")
+        text = node.get_content(metadata_mode=MetadataMode.LLM)
         try:
             llm_response = await self.llm.apredict(
                 self.extract_prompt,
