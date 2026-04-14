@@ -156,6 +156,19 @@ check_docker() {
 }
 
 start_neo4j() {
+    # Migrate old data/ to neo4j_data/ if needed (data/ is now app_data/ for the Python app)
+    if [ -d "${SCRIPT_DIR}/data" ] && [ -d "${SCRIPT_DIR}/data/databases" ] && [ ! -d "${SCRIPT_DIR}/neo4j_data" ]; then
+        log_info "Migrating Neo4j data from data/ to neo4j_data/..."
+        mv "${SCRIPT_DIR}/data" "${SCRIPT_DIR}/neo4j_data"
+        log_success "Neo4j data migrated."
+    fi
+
+    # Check if existing container uses old volume path and recreate if so
+    if docker inspect "$NEO4J_CONTAINER" --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' 2>/dev/null | grep -q "${SCRIPT_DIR}/data$"; then
+        log_info "Container uses old volume path, recreating with neo4j_data/..."
+        docker rm -f "$NEO4J_CONTAINER" >/dev/null 2>&1
+    fi
+
     # Check if container already exists
     if docker ps -a --format '{{.Names}}' | grep -q "^${NEO4J_CONTAINER}$"; then
         # Container exists, check if running
@@ -171,7 +184,7 @@ start_neo4j() {
         docker run -d \
             -p ${NEO4J_HTTP_PORT}:7474 \
             -p ${NEO4J_BOLT_PORT}:7687 \
-            -v "${SCRIPT_DIR}/data:/data" \
+            -v "${SCRIPT_DIR}/neo4j_data:/data" \
             -v "${SCRIPT_DIR}/plugins:/plugins" \
             --name "$NEO4J_CONTAINER" \
             -e "NEO4J_AUTH=${NEO4J_AUTH}" \

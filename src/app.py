@@ -48,6 +48,38 @@ from models import (
 DEFAULT_WORKSPACE_ID = "default"
 
 
+def _migrate_data_dir(old_dir: Path, new_dir: Path) -> None:
+    """One-time migration: move app files from old data/ to new app_data/ directory.
+
+    This handles the case where Neo4j's Docker volume was previously sharing
+    the data/ directory with the Python app. After this migration, Neo4j uses
+    neo4j_data/ and the app uses app_data/.
+    """
+    import shutil
+
+    app_items = ["workspaces.json", "default"]
+
+    migrated = False
+    for item in app_items:
+        src = old_dir / item
+        if src.exists():
+            dst = new_dir / item
+            if not dst.exists():
+                new_dir.mkdir(parents=True, exist_ok=True)
+                if src.is_file():
+                    shutil.copy2(src, dst)
+                    logger.info("Migrated %s to app_data/", item)
+                elif src.is_dir():
+                    shutil.copytree(src, dst)
+                    logger.info("Migrated %s/ to app_data/", item)
+                migrated = True
+            else:
+                logger.debug("Skipping migration of %s — already exists in app_data/", item)
+
+    if migrated:
+        logger.info("App data migration complete (old data/ now belongs to Neo4j only)")
+
+
 def _migrate_legacy_summaries(data_dir: Path) -> None:
     """One-time migration: copy files from legacy summaries/ to data/default/summaries/.
 
@@ -187,8 +219,13 @@ async def lifespan(app: FastAPI):
         # 1. Initialize data directory, migrate legacy summaries, set up workspace registry
         data_dir = Path(os.environ.get(
             "STUDY_BUDDY_DATA_DIR",
-            os.path.join(os.path.dirname(__file__), "..", "data"),
+            os.path.join(os.path.dirname(__file__), "..", "app_data"),
         ))
+
+        old_data_dir = Path(os.path.join(os.path.dirname(__file__), "..", "data"))
+        if old_data_dir.exists() and data_dir != old_data_dir:
+            _migrate_data_dir(old_data_dir, data_dir)
+
         _migrate_legacy_summaries(data_dir)
 
         logger.info("[STARTUP] Step 1: Loading embedding model...")
