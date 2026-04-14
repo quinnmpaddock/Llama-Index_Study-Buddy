@@ -437,8 +437,7 @@ async def query_workspace(workspace_id: str, request: QueryRequest):
         raise HTTPException(status_code=503, detail="No data ingested")
 
     try:
-        app.state.engine.similarity_top_k = request.similarity_top_k
-        response = await app.state.engine.acustom_query(request.query)
+        response = await app.state.engine.acustom_query(request.query, similarity_top_k=request.similarity_top_k)
         return QueryService.format_response(response)
     except Exception as e:
         logger.error("Query error for workspace %s: %s", workspace_id, str(e))
@@ -728,8 +727,7 @@ async def query_graph(request: QueryRequest):
         )
 
     try:
-        app.state.engine.similarity_top_k = request.similarity_top_k
-        response = await app.state.engine.acustom_query(request.query)
+        response = await app.state.engine.acustom_query(request.query, similarity_top_k=request.similarity_top_k)
         return QueryService.format_response(response)
     except Exception as e:
         logger.error("Query error: %s", str(e))

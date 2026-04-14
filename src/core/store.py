@@ -319,10 +319,10 @@ class GraphRAGQueryEngine(CustomQueryEngine):
     llm: LLM
     similarity_top_k: int = 20  # possible validation error here, come back
 
-    def custom_query(self, query_str: str) -> str:
+    def custom_query(self, query_str: str, similarity_top_k: Optional[int] = None) -> str:
         """Process all community summaries to generate answers to a specific query."""
 
-        entities = self.get_entities(query_str, self.similarity_top_k)
+        entities = self.get_entities(query_str, similarity_top_k if similarity_top_k is not None else self.similarity_top_k)
 
         community_summaries = self.graph_store.get_community_summaries()
         community_ids = self.retrieve_entity_communities(
@@ -337,10 +337,10 @@ class GraphRAGQueryEngine(CustomQueryEngine):
         final_answer = self.aggregate_answers(community_answers)
         return final_answer
 
-    async def acustom_query(self, query_str: str) -> Response:
+    async def acustom_query(self, query_str: str, similarity_top_k: Optional[int] = None) -> Response:
         """Process all community summaries to generate answers to a specific query."""
 
-        entities = self.get_entities(query_str, self.similarity_top_k)
+        entities = self.get_entities(query_str, similarity_top_k if similarity_top_k is not None else self.similarity_top_k)
 
         community_summaries = self.graph_store.get_community_summaries()
         community_ids = self.retrieve_entity_communities(
