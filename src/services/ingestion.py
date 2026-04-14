@@ -436,7 +436,7 @@ class IngestionService:
 
     def _get_data_dir(self, workspace_id: Optional[str]) -> Optional[str]:
         """Return the data directory for a workspace, or ``None`` for legacy."""
-        if workspace_id and self.workspace_registry is not None:
+        if self.workspace_registry is not None:
             return str(self.workspace_registry.data_dir)
         return None
 

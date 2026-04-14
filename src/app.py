@@ -48,6 +48,42 @@ from models import (
 DEFAULT_WORKSPACE_ID = "default"
 
 
+def _migrate_legacy_summaries(data_dir: Path) -> None:
+    """One-time migration: copy files from legacy summaries/ to data/default/summaries/.
+
+    If data/default/summaries/ doesn't exist or is empty but summaries/ does,
+    copy everything over.  This ensures backward compatibility when upgrading
+    from the single-workspace layout.
+    """
+    import shutil
+
+    legacy_dir = Path(os.path.dirname(os.path.abspath(__file__))) / ".." / "summaries"
+    target_dir = data_dir / "default" / "summaries"
+
+    if target_dir.exists() and any(target_dir.iterdir()):
+        # Already have workspace-scoped data — skip migration
+        return
+
+    if not legacy_dir.exists() or not legacy_dir.is_dir():
+        # No legacy data to migrate
+        return
+
+    logger.info("Migrating legacy summaries/ to %s...", target_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    for item in legacy_dir.iterdir():
+        src = legacy_dir / item.name
+        dst = target_dir / item.name
+        if src.is_file():
+            if not dst.exists():
+                shutil.copy2(src, dst)
+                logger.debug("Migrated %s", item.name)
+            else:
+                logger.debug("Skipping existing %s", item.name)
+
+    logger.info("Migration complete: %d files migrated", len(list(target_dir.iterdir())))
+
+
 class EntitySearchResponse(BaseModel):
     """Response for entity search."""
 
@@ -148,7 +184,13 @@ async def lifespan(app: FastAPI):
     start_time = time.time()
 
     try:
-        # 1. Setup Models
+        # 1. Initialize data directory, migrate legacy summaries, set up workspace registry
+        data_dir = Path(os.environ.get(
+            "STUDY_BUDDY_DATA_DIR",
+            os.path.join(os.path.dirname(__file__), "..", "data"),
+        ))
+        _migrate_legacy_summaries(data_dir)
+
         logger.info("[STARTUP] Step 1: Loading embedding model...")
         logger.info("[STARTUP] Using embedding model: %s", config.embedding.model)
         Settings.embed_model = HuggingFaceEmbedding(
@@ -169,8 +211,10 @@ async def lifespan(app: FastAPI):
 
         # 2. Load Persisted Summaries (via CommunityService)
         logger.info("[STARTUP] Step 2: Loading summaries...")
-        community_svc = CommunityService()  # uses legacy summaries/ dir
-        community_summaries, entity_info = community_svc.load_summaries_and_entity_info()
+        community_svc = CommunityService(data_dir=str(data_dir))
+        community_summaries, entity_info = community_svc.load_summaries_and_entity_info(
+            workspace_id=DEFAULT_WORKSPACE_ID
+        )
         logger.info("[STARTUP] Step 2 complete (%.2fs)", time.time() - start_time)
 
         # 3. Initialize Store and Index
@@ -222,10 +266,6 @@ async def lifespan(app: FastAPI):
         app.state.ingestion_svc = ingestion_svc
 
         # 7. Initialise WorkspaceRegistry and auto-create default workspace
-        data_dir = Path(os.environ.get(
-            "STUDY_BUDDY_DATA_DIR",
-            os.path.join(os.path.dirname(__file__), "..", "data"),
-        ))
         workspace_registry = WorkspaceRegistry(data_dir=data_dir)
         if workspace_registry.get(DEFAULT_WORKSPACE_ID) is None:
             workspace_registry.create(name="Default", description="Default workspace (auto-created)")
@@ -561,7 +601,7 @@ async def list_workspace_summaries(workspace_id: str):
         raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
 
     svc: CommunityService = app.state.community_svc
-    current, versions = svc.list_versions()
+    current, versions = svc.list_versions(workspace_id=workspace_id)
     current_version = SummaryVersion(**current) if current else None
     return SummaryListResponse(current=current_version, versions=versions)
 
@@ -578,7 +618,7 @@ async def get_workspace_current_summary(workspace_id: str):
         raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
 
     svc: CommunityService = app.state.community_svc
-    data = svc.get_current_version()
+    data = svc.get_current_version(workspace_id=workspace_id)
     if data is None:
         raise HTTPException(status_code=404, detail="No current summary version found")
     return data
@@ -596,7 +636,7 @@ async def get_workspace_summary_version(workspace_id: str, version: str):
         raise HTTPException(status_code=501, detail="Multi-workspace not yet implemented.")
 
     svc: CommunityService = app.state.community_svc
-    data = svc.get_version(version)
+    data = svc.get_version(version, workspace_id=workspace_id)
     if data is None:
         raise HTTPException(status_code=404, detail=f"Summary version '{version}' not found")
     return data
@@ -621,7 +661,7 @@ async def cleanup_workspace_summaries(
 
     svc: CommunityService = app.state.community_svc
     try:
-        deleted, kept = svc.cleanup_versions(keep=keep)
+        deleted, kept = svc.cleanup_versions(workspace_id=workspace_id, keep=keep)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -791,7 +831,7 @@ async def preview_ingest(
 async def list_summaries():
     """List all available summary versions."""
     svc: CommunityService = app.state.community_svc
-    current, versions = svc.list_versions()
+    current, versions = svc.list_versions(workspace_id=DEFAULT_WORKSPACE_ID)
     current_version = SummaryVersion(**current) if current else None
     return SummaryListResponse(current=current_version, versions=versions)
 
@@ -800,7 +840,7 @@ async def list_summaries():
 async def get_current_summary():
     """Get the current (active) summary version info."""
     svc: CommunityService = app.state.community_svc
-    data = svc.get_current_version()
+    data = svc.get_current_version(workspace_id=DEFAULT_WORKSPACE_ID)
     if data is None:
         raise HTTPException(status_code=404, detail="No current summary version found")
     return data
@@ -810,7 +850,7 @@ async def get_current_summary():
 async def get_summary_version(version: str):
     """Get a specific summary version's content."""
     svc: CommunityService = app.state.community_svc
-    data = svc.get_version(version)
+    data = svc.get_version(version, workspace_id=DEFAULT_WORKSPACE_ID)
     if data is None:
         raise HTTPException(status_code=404, detail=f"Summary version '{version}' not found")
     return data
@@ -826,7 +866,7 @@ async def cleanup_summaries(
 
     svc: CommunityService = app.state.community_svc
     try:
-        deleted, kept = svc.cleanup_versions(keep=keep)
+        deleted, kept = svc.cleanup_versions(workspace_id=DEFAULT_WORKSPACE_ID, keep=keep)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
