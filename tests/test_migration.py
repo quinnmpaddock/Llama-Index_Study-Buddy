@@ -23,10 +23,11 @@ class TestMigrateLegacySummaries:
 
     def test_migrate_copies_files_when_target_empty(self, tmp_path):
         """Legacy summaries/ files are copied to data/default/summaries/."""
+        from unittest.mock import patch
         from app import _migrate_legacy_summaries
 
         # Create a fake legacy summaries directory
-        legacy_dir = tmp_path / "src" / ".." / "summaries"
+        legacy_dir = tmp_path / "summaries"
         legacy_dir.mkdir(parents=True)
 
         # Create target data dir (but empty default/summaries)
@@ -43,32 +44,31 @@ class TestMigrateLegacySummaries:
             json.dumps({"version": "2026-04-08_150308"})
         )
 
-        # Patch the legacy_dir resolution by passing data_dir directly
-        # and testing that the function creates the target structure.
-        # Since _migrate_legacy_summaries uses its own path resolution,
-        # we test the CommunityService workspace-aware behavior instead.
-        # This validates that data_dir-scoped storage works correctly.
+        import os
+        original_abspath = os.path.abspath
 
-        # Test CommunityService with workspace-scoped path
-        svc = CommunityService(data_dir=str(data_dir))
+        def mock_abspath(path):
+            if path.endswith("app.py"):
+                return str(tmp_path / "src" / "app.py")
+            return original_abspath(path)
 
-        version = svc.save_summaries(
-            workspace_id="default",
-            community_summaries={"1": "test summary"},
-            entity_info={"entity1": [1]},
-            version="2026-04-08_150308",
-        )
-        assert version == "2026-04-08_150308"
+        with patch("os.path.abspath", side_effect=mock_abspath):
+            _migrate_legacy_summaries(data_dir=data_dir)
 
-        # Load them back
-        summaries, entities = svc.load_summaries_and_entity_info(
-            workspace_id="default"
-        )
-        assert len(summaries) > 0
-        assert len(entities) > 0
+        # Verify migration happened
+        target_summaries = data_dir / "default" / "summaries"
+        assert target_summaries.exists(), f"Target summaries dir should exist at {target_summaries}"
+        assert (target_summaries / "community_summaries_2026-04-08_150308.json").exists()
+        assert (target_summaries / "entity_info_2026-04-08_150308.json").exists()
+        assert (target_summaries / "current.json").exists()
+
+        # Verify content was copied correctly
+        with open(target_summaries / "community_summaries_2026-04-08_150308.json") as f:
+            assert json.load(f) == {"1": "test summary"}
 
     def test_migrate_skips_when_target_has_data(self, tmp_path):
         """Migration should be skipped when target already has data."""
+        from unittest.mock import patch
         from app import _migrate_legacy_summaries
 
         # Create target data directory with existing data
@@ -78,18 +78,27 @@ class TestMigrateLegacySummaries:
         (target_summaries / "existing_file.json").write_text("{}")
 
         # Create legacy dir (should be ignored since target has data)
-        legacy_dir = tmp_path / "src" / ".." / "summaries"
+        legacy_dir = tmp_path / "summaries"
         legacy_dir.mkdir(parents=True)
         (legacy_dir / "other_file.json").write_text("{}")
 
-        # Count files before migration attempt
-        files_before = list(target_summaries.iterdir())
+        import os
+        original_abspath = os.path.abspath
 
-        # _migrate_legacy_summaries uses a hardcoded path relative to app.py,
-        # so it won't find our tmp_path legacy dir. The test verifies that
-        # having existing data in target prevents copying.
-        # We verify the data_dir has our existing file still.
+        def mock_abspath(path):
+            if path.endswith("app.py"):
+                return str(tmp_path / "src" / "app.py")
+            return original_abspath(path)
+
+        with patch("os.path.abspath", side_effect=mock_abspath):
+            _migrate_legacy_summaries(data_dir=data_dir)
+
+        # Target should still have only the original file (migration skipped)
+        files_after = list(target_summaries.iterdir())
+        assert len(files_after) == 1
         assert (target_summaries / "existing_file.json").exists()
+        # Legacy file should NOT have been copied
+        assert not (target_summaries / "other_file.json").exists()
 
     def test_community_service_workspace_scoped_storage(self, tmp_path):
         """CommunityService stores and retrieves data in workspace-scoped paths."""
