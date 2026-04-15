@@ -147,14 +147,14 @@ class IngestionService:
         if not dir_path.is_dir():
             raise ValueError(f"Path is not a directory: {directory}")
 
-        # Resolve files to process
+        # Resolve files to process (always as absolute paths)
         dir_root = dir_path.resolve()
         if files:
             files_to_process = self._resolve_files(dir_root, files)
         else:
             files_to_process = [
-                str(dir_path / f)
-                for f in os.listdir(dir_path)
+                str(dir_root / f)
+                for f in os.listdir(dir_root)
                 if Path(f).suffix.lower() in SUPPORTED_EXTENSIONS
             ]
 
