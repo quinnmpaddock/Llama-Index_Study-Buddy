@@ -120,10 +120,15 @@ class TestNeo4jDbName:
     """Test the neo4j_db_name utility used by GraphRAGStore."""
 
     def test_neo4j_db_name_hyphenated(self):
-        assert neo4j_db_name("ml-research") == "sb_ml_research"
+        result = neo4j_db_name("ml-research")
+        assert result.startswith("sb_")
+        assert "ml_research" in result
+        assert len(result) <= 63
 
     def test_neo4j_db_name_simple(self):
-        assert neo4j_db_name("bio") == "sb_bio"
+        result = neo4j_db_name("bio")
+        assert result.startswith("sb_")
+        assert "bio" in result
 
     def test_neo4j_db_name_truncation(self):
         long_id = "a" * 70
@@ -142,12 +147,12 @@ class TestGraphRAGStoreInit:
     def test_workspace_scoped_database_name(self):
         """When workspace_id is provided, graph_name should be neo4j_db_name(workspace_id)."""
         store = _make_store(workspace_id="ml-research")
-        assert store.graph_name == "sb_ml_research"
+        assert store.graph_name == neo4j_db_name("ml-research")
         assert store.workspace_id == "ml-research"
 
     def test_workspace_scoped_database_name_simple(self):
         store = _make_store(workspace_id="bio")
-        assert store.graph_name == "sb_bio"
+        assert store.graph_name == neo4j_db_name("bio")
 
 
 class TestGraphRAGStoreGDSProjection:
@@ -182,9 +187,9 @@ class TestGraphRAGStoreGDSProjection:
         else:
             gds_projection = store.graph_name
         
-        # GDS projection is "{workspace_id}_graph", but DB name is "sb_{workspace_id}"
+        # GDS projection is "{workspace_id}_graph", but DB name is "sb_{workspace_id}_{hash}"
         assert gds_projection == "ml-research_graph"
-        assert store.graph_name == "sb_ml_research"
+        assert store.graph_name == neo4j_db_name("ml-research")
         assert gds_projection != store.graph_name
 
 

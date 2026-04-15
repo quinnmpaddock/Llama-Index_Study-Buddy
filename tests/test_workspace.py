@@ -10,13 +10,13 @@ def test_workspace_from_dict():
         "id": "ml-research",
         "name": "ML Research",
         "description": "Knowledge base for ML papers",
-        "neo4j_database": "sb_ml_research",
+        "neo4j_database": neo4j_db_name("ml-research"),
         "created_at": "2026-04-13T00:00:00",
         "updated_at": "2026-04-13T00:00:00",
     }
     ws = Workspace.from_dict(data)
     assert ws.id == "ml-research"
-    assert ws.neo4j_database == "sb_ml_research"
+    assert ws.neo4j_database == neo4j_db_name("ml-research")
 
 
 def test_workspace_to_dict():
@@ -24,18 +24,26 @@ def test_workspace_to_dict():
         id="ml-research",
         name="ML Research",
         description="ML papers",
-        neo4j_database="sb_ml_research",
+        neo4j_database=neo4j_db_name("ml-research"),
         created_at="2026-04-13T00:00:00",
         updated_at="2026-04-13T00:00:00",
     )
     d = ws.to_dict()
     assert d["id"] == "ml-research"
-    assert d["neo4j_database"] == "sb_ml_research"
+    assert d["neo4j_database"] == neo4j_db_name("ml-research")
 
 
 def test_neo4j_db_name():
-    assert neo4j_db_name("ml-research") == "sb_ml_research"
-    assert neo4j_db_name("bio") == "sb_bio"
+    result = neo4j_db_name("ml-research")
+    assert result.startswith("sb_")
+    assert "ml_research" in result
+    assert len(result) <= 63
+    # Deterministic: same input always gives same output
+    assert neo4j_db_name("ml-research") == result
+    
+    result_bio = neo4j_db_name("bio")
+    assert result_bio.startswith("sb_")
+    assert "bio" in result_bio
 
 
 def test_neo4j_db_name_long():
@@ -49,7 +57,7 @@ def test_registry_create(tmp_path):
     registry = WorkspaceRegistry(data_dir=tmp_path)
     ws = registry.create(name="ML Research", description="ML papers")
     assert ws.id == "ml-research"
-    assert ws.neo4j_database == "sb_ml_research"
+    assert ws.neo4j_database == neo4j_db_name("ml-research")
     assert (tmp_path / "ml-research").is_dir()
     assert (tmp_path / "ml-research" / "config.yaml").exists()
 

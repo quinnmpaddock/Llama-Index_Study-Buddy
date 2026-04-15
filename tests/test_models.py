@@ -1,5 +1,6 @@
 """Tests for Pydantic models."""
-from src.models import WorkspaceCreate, WorkspaceInfo, slugify, QueryRequest, GraphQueryResponse
+from src.models import WorkspaceCreate, WorkspaceInfo, GraphQueryResponse, QueryRequest, slugify
+from src.workspace import neo4j_db_name
 
 
 def test_slugify_basic():
@@ -43,7 +44,7 @@ def test_workspace_info_model():
         id="ml-research",
         name="ML Research",
         description="My ML knowledge base",
-        neo4j_database="sb_ml_research",
+        neo4j_database=neo4j_db_name("ml-research"),
         created_at="2026-04-13T00:00:00",
         updated_at="2026-04-13T00:00:00",
     )

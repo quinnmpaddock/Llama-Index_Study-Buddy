@@ -114,17 +114,17 @@ class GraphRAGExtractor(TransformComponent):
 
         existing_nodes = node.metadata.pop(KG_NODES_KEY, [])
         existing_relations = node.metadata.pop(KG_RELATIONS_KEY, [])
-        entity_metadata = node.metadata.copy()
         for entity, entity_type, description in entities:
+            entity_metadata = node.metadata.copy()
             entity_metadata["entity_description"] = description
             entity_node = EntityNode(
                 name=entity, label=entity_type, properties=entity_metadata
             )
             existing_nodes.append(entity_node)
 
-        relation_metadata = node.metadata.copy()
         for triple in entities_relationship:
             subj, obj, rel, description = triple
+            relation_metadata = node.metadata.copy()
             relation_metadata["relationship_description"] = description
             rel_node = Relation(
                 label=rel,
