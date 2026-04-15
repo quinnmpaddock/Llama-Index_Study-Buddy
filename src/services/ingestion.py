@@ -242,18 +242,15 @@ class IngestionService:
             )
 
             # 2. Load extraction prompt
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            # prompts/ lives next to src/
-            template_path = os.path.join(
-                os.path.dirname(base_dir), "src", "prompts", "kg_extract_template.txt"
-            )
-            # Also try the old location for compat
-            if not os.path.exists(template_path):
-                template_path = os.path.join(
-                    base_dir, "prompts", "kg_extract_template.txt"
+            # prompts/ is at src/prompts/ — one directory up from services/
+            _src_dir = Path(__file__).resolve().parent.parent
+            template_path = _src_dir / "prompts" / "kg_extract_template.txt"
+            if not template_path.exists():
+                raise FileNotFoundError(
+                    f"Template file not found at {template_path}. "
+                    f"Ensure src/prompts/kg_extract_template.txt exists."
                 )
-            with open(template_path, "r", encoding="utf-8") as f:
-                kg_triplet_extract_tmpl = f.read()
+            kg_triplet_extract_tmpl = template_path.read_text(encoding="utf-8")
 
             # 3. Extract nodes from documents
             logger.info(

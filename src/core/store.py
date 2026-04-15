@@ -222,12 +222,21 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
     # Workspace-scoped summary persistence
     # ------------------------------------------------------------------
 
+    # Project root — same convention as services/community.py:
+    # store.py is at src/core/store.py, so two .parent calls reach src/,
+    # and one more reaches the project root (sibling of src/).
+    _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
     def get_summaries_dir(self) -> Path:
-        """Return the directory for this workspace's summaries."""
+        """Return the directory for this workspace's summaries.
+
+        When *data_dir* is unset, uses the ``data/`` directory under the
+        project root — matching the convention in CommunityService.
+        """
         if self.data_dir:
             d = Path(self.data_dir) / (self.workspace_id or "default") / "summaries"
         else:
-            d = Path(os.path.dirname(os.path.abspath(__file__))) / ".." / ".." / (self.workspace_id or "default") / "summaries"
+            d = self._PROJECT_ROOT / "data" / (self.workspace_id or "default") / "summaries"
         d.mkdir(parents=True, exist_ok=True)
         return d
 

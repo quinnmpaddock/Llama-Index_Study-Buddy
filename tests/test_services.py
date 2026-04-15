@@ -336,6 +336,46 @@ class TestIngestionServicePreview:
         assert any(f["name"] == "test.md" for f in result["files"])
 
 
+class TestPathResolution:
+    """Verify that __file__-based paths resolve correctly from services/ subdir.
+
+    The services/ module is two levels deep (src/services/), so any path
+    built from __file__ must account for this extra nesting. These tests
+    guard against regressions like the kg_extract_template.txt FileNotFoundError
+    where both path attempts resolved to wrong directories.
+    """
+
+    def test_prompts_dir_resolves_from_services(self):
+        """src/prompts/kg_extract_template.txt must be reachable from services/."""
+        # Same logic as ingestion.py: Path(__file__).resolve().parent.parent
+        from services.ingestion import __file__ as ingestion_file
+        _src_dir = Path(ingestion_file).resolve().parent.parent
+        template_path = _src_dir / "prompts" / "kg_extract_template.txt"
+        assert template_path.exists(), (
+            f"Template not found at {template_path}. "
+            "Path resolution from services/ must reach src/prompts/."
+        )
+
+    def test_project_root_resolves_from_services(self):
+        """Project root must be reachable from services/ (3 levels up).
+
+        Validates path computation only — does not assert filesystem state,
+        since a fresh checkout or installed package may lack runtime directories.
+        """
+        from services.community import _PROJECT_ROOT
+        # _PROJECT_ROOT should be the directory containing src/
+        # (i.e. the repo/project root, not src/ itself)
+        assert _PROJECT_ROOT.name == "study-buddy" or (_PROJECT_ROOT / "src").exists(), (
+            f"_PROJECT_ROOT ({_PROJECT_ROOT}) should be the project root containing src/"
+        )
+        # The path computation should navigate: services/community.py → src/ → project_root
+        from pathlib import Path
+        expected = Path(__file__).resolve().parent.parent
+        assert _PROJECT_ROOT == expected, (
+            f"_PROJECT_ROOT ({_PROJECT_ROOT}) should equal project root ({expected})"
+        )
+
+
 class TestIngestionServiceStart:
     def test_start_ingestion_no_directory(self):
         config = MagicMock()
