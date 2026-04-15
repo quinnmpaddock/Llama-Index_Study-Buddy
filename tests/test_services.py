@@ -357,13 +357,22 @@ class TestPathResolution:
         )
 
     def test_project_root_resolves_from_services(self):
-        """Project root must be reachable from services/ (3 levels up)."""
+        """Project root must be reachable from services/ (3 levels up).
+
+        Validates path computation only — does not assert filesystem state,
+        since a fresh checkout or installed package may lack runtime directories.
+        """
         from services.community import _PROJECT_ROOT
-        assert _PROJECT_ROOT.exists(), f"Project root {_PROJECT_ROOT} does not exist"
-        # The project root should contain src/ and summaries/
-        assert (_PROJECT_ROOT / "src").is_dir(), f"src/ not found under {_PROJECT_ROOT}"
-        assert (_PROJECT_ROOT / "summaries").is_dir() or (_PROJECT_ROOT / "app_data").is_dir(), (
-            f"Neither summaries/ nor app_data/ found under {_PROJECT_ROOT}"
+        # _PROJECT_ROOT should be the directory containing src/
+        # (i.e. the repo/project root, not src/ itself)
+        assert _PROJECT_ROOT.name == "study-buddy" or (_PROJECT_ROOT / "src").exists(), (
+            f"_PROJECT_ROOT ({_PROJECT_ROOT}) should be the project root containing src/"
+        )
+        # The path computation should navigate: services/community.py → src/ → project_root
+        from pathlib import Path
+        expected = Path(__file__).resolve().parent.parent
+        assert _PROJECT_ROOT == expected, (
+            f"_PROJECT_ROOT ({_PROJECT_ROOT}) should equal project root ({expected})"
         )
 
 

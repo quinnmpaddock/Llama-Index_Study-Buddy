@@ -233,12 +233,16 @@ class TestGraphRAGStoreSummariesDir:
         assert result.is_dir()
 
     def test_summaries_dir_no_data_dir(self):
-        """Without data_dir, should use a relative path from the module."""
+        """Without data_dir, should use the data/ directory under project root."""
         store = _make_store()
         result = store.get_summaries_dir()
-        # Should end with summaries
+        # Should end with data/<workspace_id>/summaries
         assert result.name == "summaries"
-        assert result.is_dir()
+        assert result.parent.name == "default"
+        # The path should resolve to project_root/data/default/summaries
+        from pathlib import Path
+        expected_root = Path(__file__).resolve().parent.parent
+        assert result == expected_root / "data" / "default" / "summaries"
 
 
 class TestGraphRAGStoreSaveLoadSummaries:
