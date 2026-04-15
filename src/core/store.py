@@ -270,26 +270,44 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         """Load community summaries and entity info from disk.
         Returns (community_summaries, entity_info).
 
-        Reads from the version pointed to by current.json.
-        If current.json is missing, falls back to the most recent
-        community_summaries_*.json / entity_info_*.json files.
+        Reads from the version pointed to by current.json, validating
+        that both files exist for that version. If current.json is missing
+        or points to an incomplete version, falls back to the most recent
+        version where both community_summaries and entity_info files exist.
         """
         summaries_dir = self.get_summaries_dir()
         current_path = summaries_dir / "current.json"
 
+        version = None
+
+        # Try current.json first, validating both files exist
         if current_path.exists():
             with open(current_path, "r", encoding="utf-8") as f:
                 current_info = json.load(f)
-            version = current_info["version"]
-        else:
-            # Find most recent version files
-            summary_files = sorted(summaries_dir.glob("community_summaries_*.json"))
-            if not summary_files:
-                logger.warning("No saved summaries found in %s", summaries_dir)
-                return {}, {}
-            # Extract version from filename: community_summaries_{version}.json
-            latest = summary_files[-1]
-            version = latest.stem.replace("community_summaries_", "")
+            candidate_version = current_info["version"]
+            summary_path = summaries_dir / f"community_summaries_{candidate_version}.json"
+            entity_path = summaries_dir / f"entity_info_{candidate_version}.json"
+            if summary_path.exists() and entity_path.exists():
+                version = candidate_version
+            else:
+                logger.warning(
+                    "current.json points to version %s but files are missing; falling back",
+                    candidate_version,
+                )
+
+        # Fall back to the latest version where both files exist
+        if version is None:
+            summary_files = sorted(summaries_dir.glob("community_summaries_*.json"), reverse=True)
+            for sf in summary_files:
+                candidate = sf.stem.replace("community_summaries_", "")
+                ep = summaries_dir / f"entity_info_{candidate}.json"
+                if ep.exists():
+                    version = candidate
+                    break
+
+        if version is None:
+            logger.warning("No complete summary pair found in %s", summaries_dir)
+            return {}, {}
 
         summary_path = summaries_dir / f"community_summaries_{version}.json"
         entity_path = summaries_dir / f"entity_info_{version}.json"
@@ -314,15 +332,33 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
 
 
 class GraphRAGQueryEngine(CustomQueryEngine):
+    """Query engine for GraphRAG community-based retrieval.
+
+    Attributes:
+        similarity_top_k: Number of entities to retrieve from the vector
+            index. Must be an integer in the range [1, 100]. Defaults to 20.
+            The query methods validate the effective top_k value before use.
+    """
+
     graph_store: GraphRAGStore
     index: PropertyGraphIndex
     llm: LLM
-    similarity_top_k: int = 20  # possible validation error here, come back
+    similarity_top_k: int = 20
+
+    @staticmethod
+    def _validate_top_k(top_k: int) -> None:
+        """Validate similarity_top_k is in [1, 100]."""
+        if not isinstance(top_k, int) or top_k < 1 or top_k > 100:
+            raise ValueError(
+                f"similarity_top_k must be an integer in [1, 100], got {top_k!r}"
+            )
 
     def custom_query(self, query_str: str, similarity_top_k: Optional[int] = None) -> str:
         """Process all community summaries to generate answers to a specific query."""
+        effective_top_k = similarity_top_k if similarity_top_k is not None else self.similarity_top_k
+        self._validate_top_k(effective_top_k)
 
-        entities = self.get_entities(query_str, similarity_top_k if similarity_top_k is not None else self.similarity_top_k)
+        entities = self.get_entities(query_str, effective_top_k)
 
         community_summaries = self.graph_store.get_community_summaries()
         community_ids = self.retrieve_entity_communities(
@@ -330,8 +366,8 @@ class GraphRAGQueryEngine(CustomQueryEngine):
         )
         community_answers = [
             self.generate_answer_from_summary(community_summary, query_str)
-            for id, community_summary in community_summaries.items()
-            if id in community_ids
+            for community_id, community_summary in community_summaries.items()
+            if community_id in community_ids
         ]
 
         final_answer = self.aggregate_answers(community_answers)
@@ -339,8 +375,10 @@ class GraphRAGQueryEngine(CustomQueryEngine):
 
     async def acustom_query(self, query_str: str, similarity_top_k: Optional[int] = None) -> Response:
         """Process all community summaries to generate answers to a specific query."""
+        effective_top_k = similarity_top_k if similarity_top_k is not None else self.similarity_top_k
+        self._validate_top_k(effective_top_k)
 
-        entities = self.get_entities(query_str, similarity_top_k if similarity_top_k is not None else self.similarity_top_k)
+        entities = self.get_entities(query_str, effective_top_k)
 
         community_summaries = self.graph_store.get_community_summaries()
         community_ids = self.retrieve_entity_communities(
@@ -348,8 +386,8 @@ class GraphRAGQueryEngine(CustomQueryEngine):
         )
         tasks = [
             self.agenerate_answer_from_summary(community_summary, query_str)
-            for id, community_summary in community_summaries.items()
-            if id in community_ids
+            for community_id, community_summary in community_summaries.items()
+            if community_id in community_ids
         ]
 
         community_answers = await asyncio.gather(*tasks)

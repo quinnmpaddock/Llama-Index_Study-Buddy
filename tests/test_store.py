@@ -156,10 +156,19 @@ class TestGraphRAGStoreInit:
 
 
 class TestGraphRAGStoreGDSProjection:
-    """Tests for workspace-scoped GDS projection naming in build_communities."""
+    """Tests for workspace-scoped GDS projection naming in build_communities.
+
+    These tests validate the expected naming convention used by
+    build_communities (store.workspace_id, store.graph_name and
+    neo4j_db_name) without requiring a live Neo4j connection.
+    """
 
     def test_gds_projection_with_workspace(self):
-        """build_communities should use workspace-scoped projection name."""
+        """build_communities should use workspace-scoped projection name.
+
+        This test validates the expected GDS projection naming convention
+        used by build_communities and does not require a live Neo4j connection.
+        """
         store = _make_store(workspace_id="ml-research")
         # The projection name logic in build_communities
         if store.workspace_id:
@@ -170,7 +179,11 @@ class TestGraphRAGStoreGDSProjection:
         assert gds_projection == "ml-research_graph"
 
     def test_gds_projection_without_workspace(self):
-        """Without workspace_id, GDS projection should fall back to graph_name."""
+        """Without workspace_id, GDS projection should fall back to graph_name.
+
+        This test validates the expected GDS projection naming convention
+        used by build_communities and does not require a live Neo4j connection.
+        """
         store = _make_store()
         if store.workspace_id:
             gds_projection = f"{store.workspace_id}_graph"
@@ -180,7 +193,13 @@ class TestGraphRAGStoreGDSProjection:
         assert gds_projection == "neo4j"
 
     def test_gds_projection_differs_from_db_name(self):
-        """The GDS projection name should differ from the database name when workspace_id is set."""
+        """The GDS projection name should differ from the database name when workspace_id is set.
+
+        This test validates the expected GDS projection naming convention
+        used by build_communities and does not require a live Neo4j connection.
+        The source of truth is store.workspace_id, store.graph_name and
+        neo4j_db_name (see build_communities in store.py).
+        """
         store = _make_store(workspace_id="ml-research")
         if store.workspace_id:
             gds_projection = f"{store.workspace_id}_graph"
@@ -316,6 +335,56 @@ class TestGraphRAGStoreSaveLoadSummaries:
         assert summaries == {"1": "Only version"}
         assert entities == {"e1": [1]}
 
+    def test_load_skips_incomplete_version(self, tmp_path):
+        """load_summaries should skip versions missing the entity_info file."""
+        store = _make_store(
+            workspace_id="incomplete-ws",
+            data_dir=str(tmp_path),
+            entity_info={"e1": [1]},
+            community_summary={"1": "Version with both files"},
+        )
+        summaries_dir = tmp_path / "incomplete-ws" / "summaries"
+        store.save_summaries(version="v1")
+
+        # Now create a v2 summaries file WITHOUT the matching entity_info file
+        store.community_summary = {"2": "Orphan summaries - no entity_info"}
+        summaries_dir.mkdir(parents=True, exist_ok=True)
+        (summaries_dir / "community_summaries_v2.json").write_text(
+            json.dumps({"2": "Orphan summaries - no entity_info"})
+        )
+
+        # Remove current.json to force fallback
+        current_path = summaries_dir / "current.json"
+        current_path.unlink()
+
+        # Should fall back to v1 (which has both files), not v2
+        store2 = _make_store(workspace_id="incomplete-ws", data_dir=str(tmp_path))
+        summaries, entities = store2.load_summaries()
+        assert summaries == {"1": "Version with both files"}
+        assert entities == {"e1": [1]}
+
+    def test_load_current_json_points_to_missing_files(self, tmp_path):
+        """load_summaries should fall back if current.json points to missing files."""
+        store = _make_store(
+            workspace_id="missingfiles-ws",
+            data_dir=str(tmp_path),
+            entity_info={"e1": [1]},
+            community_summary={"1": "Good version"},
+        )
+        summaries_dir = tmp_path / "missingfiles-ws" / "summaries"
+        store.save_summaries(version="v_good")
+
+        # Rewrite current.json to point to a version that doesn't exist
+        current_path = summaries_dir / "current.json"
+        current_info = {"version": "v_nonexistent", "created_at": "", "files": {}, "stats": {}}
+        current_path.write_text(json.dumps(current_info))
+
+        # Should fall back to v_good (which has both files)
+        store2 = _make_store(workspace_id="missingfiles-ws", data_dir=str(tmp_path))
+        summaries, entities = store2.load_summaries()
+        assert summaries == {"1": "Good version"}
+        assert entities == {"e1": [1]}
+
 
 class TestDeprecationWarning:
     """Test that importing from core_classes emits a deprecation warning."""
@@ -335,3 +404,29 @@ class TestDeprecationWarning:
             deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
             assert len(deprecation_warnings) >= 1
             assert "core_classes is deprecated" in str(deprecation_warnings[0].message)
+
+
+class TestGraphRAGQueryEngineValidation:
+    """Tests for GraphRAGQueryEngine similarity_top_k validation."""
+
+    def test_validate_top_k_accepts_valid_range(self):
+        """Values 1-100 should pass validation."""
+        from core.store import GraphRAGQueryEngine
+        # Should not raise for valid values
+        GraphRAGQueryEngine._validate_top_k(1)
+        GraphRAGQueryEngine._validate_top_k(20)
+        GraphRAGQueryEngine._validate_top_k(100)
+
+    def test_validate_top_k_rejects_zero(self):
+        """similarity_top_k=0 should raise ValueError."""
+        import pytest as _pytest
+        from core.store import GraphRAGQueryEngine
+        with _pytest.raises(ValueError, match="similarity_top_k"):
+            GraphRAGQueryEngine._validate_top_k(0)
+
+    def test_validate_top_k_rejects_over_100(self):
+        """similarity_top_k=101 should raise ValueError."""
+        import pytest as _pytest
+        from core.store import GraphRAGQueryEngine
+        with _pytest.raises(ValueError, match="similarity_top_k"):
+            GraphRAGQueryEngine._validate_top_k(101)
