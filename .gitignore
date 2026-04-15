@@ -39,3 +39,4 @@ requirements_pinned.txt
 
 data_old/
 .worktrees/
+.hermes/
