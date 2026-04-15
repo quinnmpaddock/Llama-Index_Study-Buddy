@@ -15,9 +15,9 @@ from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Default (legacy) summaries directory — sibling of src/
-_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_DEFAULT_SUMMARIES_DIR = os.path.join(_BASE_DIR, "summaries")
+# Project root (sibling of src/) — services/ is two levels deep: src/services/
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_DEFAULT_SUMMARIES_DIR = str(_PROJECT_ROOT / "summaries")
 
 
 class CommunityService:
@@ -51,7 +51,7 @@ class CommunityService:
                 path = os.path.join(self.data_dir, workspace_id, "summaries")
             else:
                 path = os.path.join(
-                    _BASE_DIR, "data", workspace_id, "summaries"
+                    _PROJECT_ROOT, "data", workspace_id, "summaries"
                 )
         elif self.data_dir:
             path = os.path.join(self.data_dir, "default", "summaries")

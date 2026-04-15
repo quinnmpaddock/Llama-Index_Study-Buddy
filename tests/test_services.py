@@ -336,6 +336,37 @@ class TestIngestionServicePreview:
         assert any(f["name"] == "test.md" for f in result["files"])
 
 
+class TestPathResolution:
+    """Verify that __file__-based paths resolve correctly from services/ subdir.
+
+    The services/ module is two levels deep (src/services/), so any path
+    built from __file__ must account for this extra nesting. These tests
+    guard against regressions like the kg_extract_template.txt FileNotFoundError
+    where both path attempts resolved to wrong directories.
+    """
+
+    def test_prompts_dir_resolves_from_services(self):
+        """src/prompts/kg_extract_template.txt must be reachable from services/."""
+        # Same logic as ingestion.py: Path(__file__).resolve().parent.parent
+        from services.ingestion import __file__ as ingestion_file
+        _src_dir = Path(ingestion_file).resolve().parent.parent
+        template_path = _src_dir / "prompts" / "kg_extract_template.txt"
+        assert template_path.exists(), (
+            f"Template not found at {template_path}. "
+            "Path resolution from services/ must reach src/prompts/."
+        )
+
+    def test_project_root_resolves_from_services(self):
+        """Project root must be reachable from services/ (3 levels up)."""
+        from services.community import _PROJECT_ROOT
+        assert _PROJECT_ROOT.exists(), f"Project root {_PROJECT_ROOT} does not exist"
+        # The project root should contain src/ and summaries/
+        assert (_PROJECT_ROOT / "src").is_dir(), f"src/ not found under {_PROJECT_ROOT}"
+        assert (_PROJECT_ROOT / "summaries").is_dir() or (_PROJECT_ROOT / "app_data").is_dir(), (
+            f"Neither summaries/ nor app_data/ found under {_PROJECT_ROOT}"
+        )
+
+
 class TestIngestionServiceStart:
     def test_start_ingestion_no_directory(self):
         config = MagicMock()
