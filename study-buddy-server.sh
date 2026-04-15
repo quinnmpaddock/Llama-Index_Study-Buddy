@@ -156,6 +156,45 @@ check_docker() {
 }
 
 start_neo4j() {
+    # Migrate old data/ to neo4j_data/ if needed (data/ is now app_data/ for the Python app)
+    if [ -d "${SCRIPT_DIR}/data" ] && [ ! -d "${SCRIPT_DIR}/neo4j_data" ]; then
+        # First, migrate app-specific files to app_data/
+        if [ ! -d "${SCRIPT_DIR}/app_data" ]; then
+            mkdir -p "${SCRIPT_DIR}/app_data"
+        fi
+        for app_item in workspaces.json default; do
+            if [ -e "${SCRIPT_DIR}/data/${app_item}" ] && [ ! -e "${SCRIPT_DIR}/app_data/${app_item}" ]; then
+                mv "${SCRIPT_DIR}/data/${app_item}" "${SCRIPT_DIR}/app_data/${app_item}"
+                log_info "Migrated ${app_item} to app_data/"
+            fi
+        done
+        
+        # Then, move only Neo4j-specific directories to neo4j_data/
+        if [ -d "${SCRIPT_DIR}/data/databases" ] || [ -d "${SCRIPT_DIR}/data/transactions" ]; then
+            log_info "Migrating Neo4j data from data/ to neo4j_data/..."
+            mkdir -p "${SCRIPT_DIR}/neo4j_data"
+            for neo4j_item in databases transactions; do
+                if [ -e "${SCRIPT_DIR}/data/${neo4j_item}" ] && [ ! -e "${SCRIPT_DIR}/neo4j_data/${neo4j_item}" ]; then
+                    mv "${SCRIPT_DIR}/data/${neo4j_item}" "${SCRIPT_DIR}/neo4j_data/${neo4j_item}"
+                fi
+            done
+            # Move remaining Neo4j files (if any)
+            if [ -d "${SCRIPT_DIR}/data" ] && [ "$(ls -A "${SCRIPT_DIR}/data" 2>/dev/null)" ]; then
+                # Move everything else that's left (should only be Neo4j files)
+                mv "${SCRIPT_DIR}/data"/* "${SCRIPT_DIR}/neo4j_data/" 2>/dev/null || true
+            fi
+            # Remove the now-empty data directory
+            rmdir "${SCRIPT_DIR}/data" 2>/dev/null || true
+            log_success "Neo4j data migrated."
+        fi
+    fi
+
+    # Check if existing container uses old volume path and recreate if so
+    if docker inspect "$NEO4J_CONTAINER" --format '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' 2>/dev/null | grep -q "${SCRIPT_DIR}/data$"; then
+        log_info "Container uses old volume path, recreating with neo4j_data/..."
+        docker rm -f "$NEO4J_CONTAINER" >/dev/null 2>&1
+    fi
+
     # Check if container already exists
     if docker ps -a --format '{{.Names}}' | grep -q "^${NEO4J_CONTAINER}$"; then
         # Container exists, check if running
@@ -171,7 +210,7 @@ start_neo4j() {
         docker run -d \
             -p ${NEO4J_HTTP_PORT}:7474 \
             -p ${NEO4J_BOLT_PORT}:7687 \
-            -v "${SCRIPT_DIR}/data:/data" \
+            -v "${SCRIPT_DIR}/neo4j_data:/data" \
             -v "${SCRIPT_DIR}/plugins:/plugins" \
             --name "$NEO4J_CONTAINER" \
             -e "NEO4J_AUTH=${NEO4J_AUTH}" \

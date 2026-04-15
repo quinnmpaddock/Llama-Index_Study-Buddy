@@ -7,6 +7,7 @@ Priority: Environment Variables > Config File > Defaults
 
 import os
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Any
 
@@ -75,6 +76,72 @@ class DockerConfig:
         self.image = config_dict.get("image", "neo4j:latest")
         self.http_port = config_dict.get("http_port", 7474)
         self.bolt_port = config_dict.get("bolt_port", 7687)
+
+
+@dataclass
+class WorkspaceConfig:
+    """Per-workspace config overrides.
+    
+    Any field set to None falls back to the global config value.
+    Resolution order: workspace override -> global config -> hardcoded default
+    """
+    llm_model: Optional[str] = None
+    llm_api_base: Optional[str] = None
+    embedding_model: Optional[str] = None
+    max_paths_per_chunk: Optional[int] = None
+    extraction_prompt: Optional[str] = None
+    neo4j_database: Optional[str] = None
+
+    def resolve(self, global_defaults: dict) -> dict:
+        """Merge workspace overrides with global defaults.
+        
+        Workspace value takes precedence if not None.
+        """
+        result = {}
+        for key in [
+            "llm_model", "llm_api_base", "embedding_model",
+            "max_paths_per_chunk", "extraction_prompt", "neo4j_database",
+        ]:
+            ws_val = getattr(self, key)
+            result[key] = ws_val if ws_val is not None else global_defaults.get(key)
+        return result
+
+    @classmethod
+    def from_yaml(cls, path: Path) -> "WorkspaceConfig":
+        """Load workspace config from a YAML file."""
+        if not path.exists():
+            return cls()
+        try:
+            import yaml
+            with open(path, "r") as f:
+                data = yaml.safe_load(f) or {}
+        except ImportError:
+            data = cls._parse_simple_yaml(path)
+        return cls(
+            llm_model=data.get("llm_model"),
+            llm_api_base=data.get("llm_api_base"),
+            embedding_model=data.get("embedding_model"),
+            max_paths_per_chunk=data.get("max_paths_per_chunk"),
+            extraction_prompt=data.get("extraction_prompt"),
+            neo4j_database=data.get("neo4j_database"),
+        )
+
+    @staticmethod
+    def _parse_simple_yaml(path: Path) -> dict:
+        """Basic YAML parser (mirrors Config._parse_simple_yaml)."""
+        data = {}
+        try:
+            with open(path, "r") as f:
+                for line in f:
+                    line = line.rstrip()
+                    if not line or line.strip().startswith("#"):
+                        continue
+                    if ":" in line and not line.startswith(" "):
+                        key, value = line.split(":", 1)
+                        data[key.strip()] = value.strip().strip('"').strip("'")
+        except OSError:
+            pass
+        return data
 
 
 class Config:
@@ -192,6 +259,16 @@ class Config:
         self.graphrag = GraphRAGConfig(self._raw_config.get("graphrag", {}))
         self.docker = DockerConfig(self._raw_config.get("docker", {}))
         self._validate()
+    
+    def workspace_defaults(self) -> dict:
+        """Return global config values as a dict for WorkspaceConfig.resolve()."""
+        return {
+            "llm_model": self.llm.model,
+            "llm_api_base": self.llm.api_base,
+            "embedding_model": self.embedding.model,
+            "max_paths_per_chunk": self.graphrag.max_paths_per_chunk,
+            "extraction_prompt": self.graphrag.extraction_prompt,
+        }
     
     @classmethod
     def get(cls) -> 'Config':
