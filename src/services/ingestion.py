@@ -134,11 +134,12 @@ class IngestionService:
         directory: str,
         files: Optional[List[str]] = None,
         workspace_id: Optional[str] = None,
-    ) -> Tuple[str, dict]:
+    ) -> Tuple[str, dict, List[str]]:
         """Validate inputs and enqueue a background ingestion task.
 
-        Returns ``(task_id, response_dict)`` where the dict contains the
-        immediate HTTP response data (status, file list, etc.).
+        Returns ``(task_id, response_dict, files_to_process)`` where the dict
+        contains the immediate HTTP response data and files_to_process is the
+        list of resolved absolute file paths to pass to ``run_ingestion``.
         """
         dir_path = Path(directory)
         if not dir_path.exists():
@@ -165,7 +166,7 @@ class IngestionService:
                 "total_nodes": 0,
                 "message": "No supported files found to process",
             }
-            return "", response
+            return "", response, []
 
         # Check for API key
         if not self.config.llm.api_key:
@@ -187,7 +188,7 @@ class IngestionService:
                 f"{len(files_to_process)} file(s) being processed. "
                 f"Task ID: {task_id}"
             ),
-        }
+        }, files_to_process
 
     def get_status(self, task_id: str) -> Optional[dict]:
         """Return the status dict for a background task, or ``None``."""
