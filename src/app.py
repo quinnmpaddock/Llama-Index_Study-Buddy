@@ -467,7 +467,7 @@ async def ingest_workspace(
 
     svc: IngestionService = app.state.ingestion_svc
     try:
-        task_id, response_data = svc.start_ingestion(
+        task_id, response_data, files_to_process = svc.start_ingestion(
             directory=request.directory,
             files=request.files,
         )
@@ -484,7 +484,7 @@ async def ingest_workspace(
     background_tasks.add_task(
         svc.run_ingestion,
         str(request.directory),
-        [str(f) for f in (request.files or [])] if request.files else [],
+        files_to_process,
         task_id,
     )
     return IngestResponse(**response_data)
@@ -814,7 +814,7 @@ async def ingest_documents(
     svc: IngestionService = app.state.ingestion_svc
 
     try:
-        task_id, response_data = svc.start_ingestion(
+        task_id, response_data, files_to_process = svc.start_ingestion(
             directory=request.directory,
             files=request.files,
         )
@@ -834,7 +834,7 @@ async def ingest_documents(
     background_tasks.add_task(
         svc.run_ingestion,
         str(request.directory),
-        [str(f) for f in (request.files or [])] if request.files else [],
+        files_to_process,
         task_id,
     )
 

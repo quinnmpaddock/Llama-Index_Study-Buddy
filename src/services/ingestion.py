@@ -134,11 +134,12 @@ class IngestionService:
         directory: str,
         files: Optional[List[str]] = None,
         workspace_id: Optional[str] = None,
-    ) -> Tuple[str, dict]:
+    ) -> Tuple[str, dict, List[str]]:
         """Validate inputs and enqueue a background ingestion task.
 
-        Returns ``(task_id, response_dict)`` where the dict contains the
-        immediate HTTP response data (status, file list, etc.).
+        Returns ``(task_id, response_dict, files_to_process)`` where the dict
+        contains the immediate HTTP response data and files_to_process is the
+        list of resolved absolute file paths to pass to ``run_ingestion``.
         """
         dir_path = Path(directory)
         if not dir_path.exists():
@@ -146,14 +147,14 @@ class IngestionService:
         if not dir_path.is_dir():
             raise ValueError(f"Path is not a directory: {directory}")
 
-        # Resolve files to process
+        # Resolve files to process (always as absolute paths)
         dir_root = dir_path.resolve()
         if files:
             files_to_process = self._resolve_files(dir_root, files)
         else:
             files_to_process = [
-                str(dir_path / f)
-                for f in os.listdir(dir_path)
+                str(dir_root / f)
+                for f in os.listdir(dir_root)
                 if Path(f).suffix.lower() in SUPPORTED_EXTENSIONS
             ]
 
@@ -165,7 +166,7 @@ class IngestionService:
                 "total_nodes": 0,
                 "message": "No supported files found to process",
             }
-            return "", response
+            return "", response, []
 
         # Check for API key
         if not self.config.llm.api_key:
@@ -187,7 +188,7 @@ class IngestionService:
                 f"{len(files_to_process)} file(s) being processed. "
                 f"Task ID: {task_id}"
             ),
-        }
+        }, files_to_process
 
     def get_status(self, task_id: str) -> Optional[dict]:
         """Return the status dict for a background task, or ``None``."""
