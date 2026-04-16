@@ -104,3 +104,22 @@ def test_root_still_works(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "message" in resp.json()
+
+
+# ------------------------------------------------------------------
+# Removed workspace-scoped routes return 404
+# ------------------------------------------------------------------
+
+def test_kb_workspace_routes_removed(client):
+    """Workspace-scoped /kb routes should return 404 (removed)."""
+    # POST /kb/default/query should not exist
+    resp = client.post("/kb/default/query", json={"query": "test"})
+    assert resp.status_code == 404
+
+    # GET /kb/default/entities should not exist
+    resp = client.get("/kb/default/entities")
+    assert resp.status_code == 404
+
+    # GET /kb/default/communities should not exist
+    resp = client.get("/kb/default/communities")
+    assert resp.status_code == 404

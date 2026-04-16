@@ -47,24 +47,29 @@ def _migrate_data_dir(old_dir: Path, new_dir: Path) -> None:
     """
     import shutil
 
-    app_items = ["default"]
+    if not old_dir.exists():
+        logger.debug("Skipping migration: old data dir %s does not exist", old_dir)
+        return
 
     migrated = False
-    for item in app_items:
-        src = old_dir / item
-        if src.exists():
-            dst = new_dir / item
-            if not dst.exists():
-                new_dir.mkdir(parents=True, exist_ok=True)
-                if src.is_file():
-                    shutil.copy2(src, dst)
-                    logger.info("Migrated %s to app_data/", item)
-                elif src.is_dir():
-                    shutil.copytree(src, dst)
-                    logger.info("Migrated %s/ to app_data/", item)
-                migrated = True
-            else:
-                logger.debug("Skipping migration of %s — already exists in app_data/", item)
+    for item in old_dir.iterdir():
+        src = old_dir / item.name
+        # Only migrate directories (workspace data like "default/") and
+        # app data files (e.g. summaries.json). Skip Neo4j-only dirs.
+        if item.name.startswith(".") or item.name in ("databases", "dbms", "transactions"):
+            continue
+        dst = new_dir / item.name
+        if dst.exists():
+            logger.debug("Skipping migration of %s — already exists in app_data/", item.name)
+            continue
+        new_dir.mkdir(parents=True, exist_ok=True)
+        if src.is_file():
+            shutil.copy2(src, dst)
+            logger.info("Migrated %s to app_data/", item.name)
+        elif src.is_dir():
+            shutil.copytree(src, dst)
+            logger.info("Migrated %s/ to app_data/", item.name)
+        migrated = True
 
     if migrated:
         logger.info("App data migration complete (old data/ now belongs to Neo4j only)")
@@ -257,6 +262,7 @@ async def lifespan(app: FastAPI):
             refresh_schema=False,
             create_indexes=False,
             timeout=config.neo4j.timeout,
+            data_dir=str(data_dir),
         )
         logger.info("[STARTUP] Step 3a complete (%.2fs)", time.time() - start_time)
 
@@ -524,7 +530,7 @@ async def cleanup_summaries(
     return SummaryCleanupResponse(
         deleted=deleted,
         kept=kept,
-        message=f"Deleted {len(deleted) // 2} version(s), keeping {len(kept)} version(s)",
+        message=f"Deleted {len(deleted)} file(s), keeping {len(kept)} file(s)",
     )
 
 
