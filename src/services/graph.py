@@ -1,9 +1,7 @@
 """Graph entity and community query service.
 
 Provides read-only access to entity & community data that lives in
-``app.state`` (or, in the future, per-workspace stores).  Each method
-accepts an optional *workspace_id* parameter for forward compatibility;
-currently all data is sourced from the global ``app.state`` attributes.
+``app.state`` attributes.
 """
 
 import logging
@@ -86,7 +84,6 @@ class GraphService:
         self,
         query: Optional[str],
         limit: int = 50,
-        workspace_id: Optional[str] = None,
     ) -> dict:
         """Search entities by name (case-insensitive).
 
@@ -111,7 +108,7 @@ class GraphService:
 
         return {"entities": matches[:limit], "total": len(matches)}
 
-    def get_entity(self, name: str, workspace_id: Optional[str] = None) -> Optional[dict]:
+    def get_entity(self, name: str) -> Optional[dict]:
         """Get entity details by name (case-insensitive).
 
         Returns ``{"name": ..., "communities": [...]}`` or ``None``.
@@ -127,7 +124,7 @@ class GraphService:
     # Community endpoints
     # ------------------------------------------------------------------
 
-    def list_communities(self, workspace_id: Optional[str] = None) -> dict:
+    def list_communities(self) -> dict:
         """List all communities with entity counts.
 
         Returns ``{"communities": [...], "total": int}``.
@@ -154,7 +151,7 @@ class GraphService:
 
         return {"communities": communities, "total": len(communities)}
 
-    def get_community(self, id: int, workspace_id: Optional[str] = None) -> Optional[dict]:
+    def get_community(self, id: int) -> Optional[dict]:
         """Get community details by ID.
 
         Returns ``{"id": ..., "summary": ..., "entity_count": ...}``
@@ -171,7 +168,7 @@ class GraphService:
         return {"id": id, "summary": summary, "entity_count": entity_count}
 
     def get_community_entities(
-        self, id: int, workspace_id: Optional[str] = None
+        self, id: int
     ) -> Optional[dict]:
         """Get entities belonging to a community.
 

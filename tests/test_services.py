@@ -21,7 +21,6 @@ from services.graph import GraphService, _make_summary_preview
 from services.query import QueryService
 from services.ingestion import extract_json, parse_fn, IngestionService
 
-
 # ---------------------------------------------------------------------------
 # CommunityService tests
 # ---------------------------------------------------------------------------
@@ -32,49 +31,48 @@ class TestCommunityServiceFindSnapshot:
 
     def test_no_snapshots(self, tmp_path):
         svc = CommunityService(data_dir=str(tmp_path))
-        result = svc.find_most_recent_snapshot(workspace_id="test-ws")
+        result = svc.find_most_recent_snapshot()
         assert result is None
 
     def test_single_snapshot(self, tmp_path):
         svc = CommunityService(data_dir=str(tmp_path))
-        ws_dir = tmp_path / "test-ws" / "summaries"
-        ws_dir.mkdir(parents=True)
+        summaries_dir = tmp_path / "default" / "summaries"
+        summaries_dir.mkdir(parents=True)
 
         # Write a matching pair
-        with open(ws_dir / "community_summaries_2026-04-10_120000.json", "w") as f:
+        with open(summaries_dir / "community_summaries_2026-04-10_120000.json", "w") as f:
             json.dump({}, f)
-        with open(ws_dir / "entity_info_2026-04-10_120000.json", "w") as f:
+        with open(summaries_dir / "entity_info_2026-04-10_120000.json", "w") as f:
             json.dump({}, f)
 
-        version = svc.find_most_recent_snapshot(workspace_id="test-ws")
+        version = svc.find_most_recent_snapshot()
         assert version == "2026-04-10_120000"
 
     def test_multiple_snapshots_returns_newest(self, tmp_path):
         svc = CommunityService(data_dir=str(tmp_path))
-        ws_dir = tmp_path / "ws1" / "summaries"
-        ws_dir.mkdir(parents=True)
+        summaries_dir = tmp_path / "default" / "summaries"
+        summaries_dir.mkdir(parents=True)
 
         for ts in ["2026-01-01_000000", "2026-06-15_120000", "2026-03-01_060000"]:
-            with open(ws_dir / f"community_summaries_{ts}.json", "w") as f:
+            with open(summaries_dir / f"community_summaries_{ts}.json", "w") as f:
                 json.dump({}, f)
-            with open(ws_dir / f"entity_info_{ts}.json", "w") as f:
+            with open(summaries_dir / f"entity_info_{ts}.json", "w") as f:
                 json.dump({}, f)
 
-        version = svc.find_most_recent_snapshot(workspace_id="ws1")
+        version = svc.find_most_recent_snapshot()
         assert version == "2026-06-15_120000"
 
     def test_incomplete_pair_ignored(self, tmp_path):
         svc = CommunityService(data_dir=str(tmp_path))
-        ws_dir = tmp_path / "ws2" / "summaries"
-        ws_dir.mkdir(parents=True)
+        summaries_dir = tmp_path / "default" / "summaries"
+        summaries_dir.mkdir(parents=True)
 
         # Only community_summaries, no entity_info
-        with open(ws_dir / "community_summaries_2026-01-01_000000.json", "w") as f:
+        with open(summaries_dir / "community_summaries_2026-01-01_000000.json", "w") as f:
             json.dump({}, f)
 
-        version = svc.find_most_recent_snapshot(workspace_id="ws2")
+        version = svc.find_most_recent_snapshot()
         assert version is None
-
 
 class TestCommunityServiceLoadSave:
     """Tests for CommunityService.load/save round-trip."""
@@ -84,15 +82,14 @@ class TestCommunityServiceLoadSave:
         summaries = {"1": "A summary", "2": "Another summary"}
         entity_info = {"entity1": [1, 2], "entity2": [2]}
 
-        svc.save_summaries("ws-test", summaries, entity_info, version="v1")
-        loaded_summaries, loaded_entities = svc.load_summaries_and_entity_info("ws-test")
-
+        svc.save_summaries(summaries, entity_info, version="v1")
+        loaded_summaries, loaded_entities = svc.load_summaries_and_entity_info()
         assert loaded_summaries == {1: "A summary", 2: "Another summary"}
         assert loaded_entities == entity_info
 
     def test_load_empty_returns_empty(self, tmp_path):
         svc = CommunityService(data_dir=str(tmp_path))
-        summaries, entities = svc.load_summaries_and_entity_info("empty-ws")
+        summaries, entities = svc.load_summaries_and_entity_info()
         assert summaries == {}
         assert entities == {}
 
@@ -101,11 +98,11 @@ class TestCommunityServiceLoadSave:
         summaries = {"1": "Only version"}
         entity_info = {"e1": [1]}
 
-        svc.save_summaries("pointer-ws", summaries, entity_info, version="v_pin")
+        svc.save_summaries(summaries, entity_info, version="v_pin")
 
         # Load in a new instance — should find data via current.json
         svc2 = CommunityService(data_dir=str(tmp_path))
-        loaded_s, loaded_e = svc2.load_summaries_and_entity_info("pointer-ws")
+        loaded_s, loaded_e = svc2.load_summaries_and_entity_info()
         assert loaded_s == {1: "Only version"}
 
 
@@ -114,45 +111,44 @@ class TestCommunityServiceVersions:
 
     def test_list_versions_empty(self, tmp_path):
         svc = CommunityService(data_dir=str(tmp_path))
-        current, versions = svc.list_versions("ws-list")
+        current, versions = svc.list_versions()
         assert current is None
         assert versions == []
 
     def test_list_versions_with_data(self, tmp_path):
         svc = CommunityService(data_dir=str(tmp_path))
-        svc.save_summaries("ws-list", {"1": "s1"}, {"e1": [1]}, version="v_list")
+        svc.save_summaries({"1": "s1"}, {"e1": [1]}, version="v_list")
 
-        current, versions = svc.list_versions("ws-list")
+        current, versions = svc.list_versions()
         assert current is not None
         assert current["version"] == "v_list"
         assert len(versions) == 1
 
     def test_get_version(self, tmp_path):
         svc = CommunityService(data_dir=str(tmp_path))
-        svc.save_summaries("ws-get", {"1": "summary"}, {"e1": [1]}, version="v_get")
+        svc.save_summaries({"1": "summary"}, {"e1": [1]}, version="v_get")
 
-        data = svc.get_version("v_get", "ws-get")
+        data = svc.get_version("v_get")
         assert data is not None
         assert data["version"] == "v_get"
 
     def test_get_version_not_found(self, tmp_path):
         svc = CommunityService(data_dir=str(tmp_path))
-        assert svc.get_version("nonexistent", "ws-get") is None
+        assert svc.get_version("nonexistent") is None
 
     def test_cleanup_keeps_newest(self, tmp_path):
         svc = CommunityService(data_dir=str(tmp_path))
         # Create 3 versions
         for v in ["v_old", "v_mid", "v_new"]:
-            svc.save_summaries("ws-cleanup", {"1": f"summary_{v}"}, {"e1": [1]}, version=v)
+            svc.save_summaries({"1": f"summary_{v}"}, {"e1": [1]}, version=v)
 
-        deleted, kept = svc.cleanup_versions("ws-cleanup", keep=2)
+        deleted, kept = svc.cleanup_versions(keep=2)
         assert len(deleted) >= 2  # both entity_info and community_summaries files deleted
 
     def test_cleanup_invalid_keep(self, tmp_path):
         svc = CommunityService(data_dir=str(tmp_path))
         with pytest.raises(ValueError, match="at least 1"):
-            svc.cleanup_versions("ws-bad", keep=0)
-
+            svc.cleanup_versions(keep=0)
 
 # ---------------------------------------------------------------------------
 # GraphService tests
@@ -334,7 +330,6 @@ class TestIngestionServicePreview:
         result = IngestionService.preview_directory(str(tmp_path))
         assert result["total_files"] == 2  # .md and .txt, not .xyz
         assert any(f["name"] == "test.md" for f in result["files"])
-
 
 class TestPathResolution:
     """Verify that __file__-based paths resolve correctly from services/ subdir.
