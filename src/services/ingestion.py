@@ -236,9 +236,18 @@ class IngestionService:
                 is_chat_model=True,
             )
 
-            # 2. Load extraction prompt
-            _prompt_reg = PromptRegistry()
+            # 2. Load extraction prompts
+            _prompt_reg = PromptRegistry(config=self.config.graphrag)
             kg_triplet_extract_tmpl = _prompt_reg.raw("kg_extract")
+
+            # Load two-pass prompts if needed
+            use_two_pass = getattr(self.config.graphrag, "use_two_pass", False)
+            entity_prompt = None
+            relationship_prompt = None
+            if use_two_pass:
+                entity_prompt = _prompt_reg.raw("kg_extract_entities")
+                relationship_prompt = _prompt_reg.raw("kg_extract_relationships")
+                logger.info("Two-pass extraction enabled (entities then relationships)")
 
             # 3. Extract nodes from documents
             logger.info(
@@ -313,6 +322,9 @@ class IngestionService:
                 use_instructor=use_instructor,
                 instructor_client=instructor_client,
                 instructor_model_name=self.config.llm.model,
+                use_two_pass=use_two_pass,
+                entity_prompt=entity_prompt,
+                relationship_prompt=relationship_prompt,
             )
 
             # 5. Connect to Neo4j

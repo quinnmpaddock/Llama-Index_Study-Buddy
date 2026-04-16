@@ -16,6 +16,7 @@ if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 
 from core.extraction_models import Entity, ExtractionResult, Relationship
+from core.extraction_models import EntitiesOnlyResult, RelationshipsOnlyResult
 
 
 # ------------------------------------------------------------------
@@ -377,3 +378,279 @@ class TestExtractionResultEdgeCases:
         restored = ExtractionResult.model_validate_json(json_str)
         assert restored.entities[0].entity_name == "Python"
         assert restored.entities[0].entity_type == "Technology"
+
+
+# ------------------------------------------------------------------
+# Two-pass extraction model tests
+# ------------------------------------------------------------------
+
+
+class TestEntitiesOnlyResult:
+    def test_empty_entities(self):
+        result = EntitiesOnlyResult()
+        assert result.entities == []
+
+    def test_entities_from_dict(self):
+        data = {
+            "entities": [
+                {
+                    "entity_name": "Margaret Hamilton",
+                    "entity_type": "Person",
+                    "entity_description": "Software engineer who led the software engineering division at MIT Draper Laboratory.",
+                },
+                {
+                    "entity_name": "Apollo Program",
+                    "entity_type": "Event",
+                    "entity_description": "NASA's human spaceflight program.",
+                },
+            ]
+        }
+        result = EntitiesOnlyResult(**data)
+        assert len(result.entities) == 2
+        assert result.entities[0].entity_name == "Margaret Hamilton"
+        assert result.entities[1].entity_type == "Event"
+
+    def test_to_tuples(self):
+        result = EntitiesOnlyResult(
+            entities=[
+                Entity(
+                    entity_name="Python",
+                    entity_type="Technology",
+                    entity_description="A programming language.",
+                ),
+            ]
+        )
+        tuples = result.to_tuples()
+        assert len(tuples) == 1
+        assert tuples[0] == ("Python", "Technology", "A programming language.")
+
+    def test_to_tuples_empty(self):
+        result = EntitiesOnlyResult()
+        assert result.to_tuples() == []
+
+    def test_format_for_relationship_prompt(self):
+        result = EntitiesOnlyResult(
+            entities=[
+                Entity(
+                    entity_name="Margaret Hamilton",
+                    entity_type="Person",
+                    entity_description="Software engineer.",
+                ),
+                Entity(
+                    entity_name="Apollo Program",
+                    entity_type="Event",
+                    entity_description="NASA's human spaceflight program.",
+                ),
+            ]
+        )
+        formatted = result.format_for_relationship_prompt()
+        assert "- Margaret Hamilton (Person): Software engineer." in formatted
+        assert "- Apollo Program (Event): NASA's human spaceflight program." in formatted
+        assert formatted.count("\n") == 1  # two lines, one newline
+
+
+class TestRelationshipsOnlyResult:
+    def test_empty_relationships(self):
+        result = RelationshipsOnlyResult()
+        assert result.relationships == []
+
+    def test_relationships_from_dict(self):
+        data = {
+            "relationships": [
+                {
+                    "source_entity": "Margaret Hamilton",
+                    "target_entity": "Apollo Program",
+                    "relation": "developed software for",
+                    "relationship_description": "Margaret Hamilton developed onboard flight software for the Apollo program.",
+                },
+            ]
+        }
+        result = RelationshipsOnlyResult(**data)
+        assert len(result.relationships) == 1
+        assert result.relationships[0].source_entity == "Margaret Hamilton"
+
+    def test_to_tuples(self):
+        result = RelationshipsOnlyResult(
+            relationships=[
+                Relationship(
+                    source_entity="A",
+                    target_entity="B",
+                    relation="created",
+                    relationship_description="A created B.",
+                ),
+            ]
+        )
+        tuples = result.to_tuples()
+        assert len(tuples) == 1
+        assert tuples[0] == ("A", "B", "created", "A created B.")
+
+    def test_to_tuples_empty(self):
+        result = RelationshipsOnlyResult()
+        assert result.to_tuples() == []
+
+
+class TestTwoPassExtractionIntegration:
+    """Test that two-pass extraction components work together."""
+
+    def test_entities_then_relationships_round_trip(self):
+        """Simulate the full two-pass flow: entities → format → relationships."""
+        # Pass 1: Extract entities
+        entities_result = EntitiesOnlyResult(
+            entities=[
+                Entity(
+                    entity_name="Margaret Hamilton",
+                    entity_type="Person",
+                    entity_description="Software engineer who led the software engineering division at MIT Draper Laboratory.",
+                ),
+                Entity(
+                    entity_name="MIT Draper Laboratory",
+                    entity_type="Organization",
+                    entity_description="The laboratory where Margaret Hamilton led the software engineering division.",
+                ),
+            ]
+        )
+        entity_tuples = entities_result.to_tuples()
+        entities_formatted = entities_result.format_for_relationship_prompt()
+
+        # Verify format looks like what the relationship prompt expects
+        assert "Margaret Hamilton (Person)" in entities_formatted
+        assert "MIT Draper Laboratory (Organization)" in entities_formatted
+
+        # Pass 2: Relationships referencing those entities
+        rels_result = RelationshipsOnlyResult(
+            relationships=[
+                Relationship(
+                    source_entity="Margaret Hamilton",
+                    target_entity="MIT Draper Laboratory",
+                    relation="led division at",
+                    relationship_description="Margaret Hamilton led the software engineering division at MIT Draper Laboratory.",
+                ),
+            ]
+        )
+        relationship_tuples = rels_result.to_tuples()
+
+        # Combined result matches single-pass ExtractionResult format
+        combined_entities = entity_tuples
+        combined_relationships = relationship_tuples
+        assert len(combined_entities) == 2
+        assert len(combined_relationships) == 1
+        assert combined_relationships[0] == (
+            "Margaret Hamilton",
+            "MIT Draper Laboratory",
+            "led division at",
+            "Margaret Hamilton led the software engineering division at MIT Draper Laboratory.",
+        )
+
+
+class TestGraphRAGExtractorTwoPassMode:
+    """Test two-pass extraction configuration in GraphRAGExtractor."""
+
+    @pytest.fixture()
+    def _mock_llama_index(self):
+        """Mock llama_index.core imports (same as Instructor test fixture)."""
+        import types
+        mock_modules = {}
+
+        for mod_name in [
+            "llama_index.core",
+            "llama_index.core.async_utils",
+            "llama_index.core.graph_stores.types",
+            "llama_index.core.indices.property_graph.utils",
+            "llama_index.core.llms",
+            "llama_index.core.prompts",
+            "llama_index.core.prompts.default_prompts",
+            "llama_index.core.schema",
+        ]:
+            mock_modules[mod_name] = types.ModuleType(mod_name)
+
+        mock_modules["llama_index.core"].Settings = MagicMock()
+        mock_modules["llama_index.core"].async_utils = mock_modules["llama_index.core.async_utils"]
+        mock_modules["llama_index.core.async_utils"].run_jobs = MagicMock()
+        mock_modules["llama_index.core.graph_stores.types"].KG_NODES_KEY = "_kg_nodes"
+        mock_modules["llama_index.core.graph_stores.types"].KG_RELATIONS_KEY = "_kg_relations"
+        mock_modules["llama_index.core.graph_stores.types"].EntityNode = MagicMock
+        mock_modules["llama_index.core.graph_stores.types"].Relation = MagicMock
+        mock_modules["llama_index.core.indices.property_graph.utils"].default_parse_triplets_fn = lambda x: ([], [])
+        mock_modules["llama_index.core.llms"].LLM = MagicMock
+        mock_modules["llama_index.core.prompts"].PromptTemplate = MagicMock
+        mock_modules["llama_index.core.prompts.default_prompts"].DEFAULT_KG_TRIPLET_EXTRACT_PROMPT = "default"
+        mock_modules["llama_index.core.schema"].BaseNode = MagicMock
+        mock_modules["llama_index.core.schema"].MetadataMode = MagicMock()
+        mock_modules["llama_index.core.schema"].MetadataMode.LLM = "llm"
+
+        class MockTransformComponent:
+            __class_name__ = "TransformComponent"
+            def __init__(self, **kwargs):
+                for k, v in kwargs.items():
+                    setattr(self, k, v)
+
+        mock_modules["llama_index.core.schema"].TransformComponent = MockTransformComponent
+
+        with patch.dict(sys.modules, mock_modules):
+            yield
+
+    def test_two_pass_requires_entity_prompt(self, _mock_llama_index):
+        """use_two_pass=True without entity_prompt should raise ValueError."""
+        if "core.extractor" in sys.modules:
+            del sys.modules["core.extractor"]
+
+        from core.extractor import GraphRAGExtractor
+
+        with pytest.raises(ValueError, match="entity_prompt must be provided"):
+            GraphRAGExtractor(
+                use_two_pass=True,
+                entity_prompt=None,
+                relationship_prompt="some prompt",
+            )
+
+    def test_two_pass_requires_relationship_prompt(self, _mock_llama_index):
+        """use_two_pass=True without relationship_prompt should raise ValueError."""
+        if "core.extractor" in sys.modules:
+            del sys.modules["core.extractor"]
+
+        from core.extractor import GraphRAGExtractor
+
+        from core.prompts import PromptRegistry
+        reg = PromptRegistry()
+        entity_prompt = reg.raw("kg_extract_entities")
+
+        with pytest.raises(ValueError, match="relationship_prompt must be provided"):
+            GraphRAGExtractor(
+                use_two_pass=True,
+                entity_prompt=entity_prompt,
+                relationship_prompt=None,
+            )
+
+    def test_two_pass_with_both_prompts(self, _mock_llama_index):
+        """use_two_pass=True with both prompts should initialize correctly."""
+        if "core.extractor" in sys.modules:
+            del sys.modules["core.extractor"]
+
+        from core.extractor import GraphRAGExtractor
+
+        from core.prompts import PromptRegistry
+        reg = PromptRegistry()
+        entity_prompt = reg.raw("kg_extract_entities")
+        relationship_prompt = reg.raw("kg_extract_relationships")
+
+        extractor = GraphRAGExtractor(
+            use_two_pass=True,
+            entity_prompt=entity_prompt,
+            relationship_prompt=relationship_prompt,
+            parse_fn=lambda x: ([], []),
+        )
+        assert extractor.use_two_pass is True
+        assert extractor.entity_prompt is not None
+        assert extractor.relationship_prompt is not None
+
+    def test_two_pass_default_off(self, _mock_llama_index):
+        """use_two_pass should default to False."""
+        if "core.extractor" in sys.modules:
+            del sys.modules["core.extractor"]
+
+        from core.extractor import GraphRAGExtractor
+
+        extractor = GraphRAGExtractor(parse_fn=lambda x: ([], []))
+        assert extractor.use_two_pass is False
+        assert extractor.entity_prompt is None
+        assert extractor.relationship_prompt is None

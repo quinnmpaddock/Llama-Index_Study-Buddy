@@ -1,0 +1,64 @@
+-Goal-
+Given a text document and a list of previously extracted entities, identify all meaningful relationships among those entities. You are ONLY extracting relationships in this pass — the entities are already identified and listed for you.
+
+-Input-
+You will receive:
+1. The original text
+2. A list of extracted entities with their names, types, and descriptions
+
+Your task is to identify relationships between pairs of entities from the provided list.
+
+-Relationship Rules-
+- Only create relationships between entities that appear in the provided entity list.  Do NOT invent new entities.
+- Use specific, descriptive verb phrases for the relation: "developed", "acquired", "was CEO of", "led division at".  Avoid vague relations like "is related to", "is associated with", or "involves".
+- Only extract relationships that are clearly supported by the text.  Do NOT fabricate or speculate.
+- Each relationship must reference entity names EXACTLY as they appear in the entity list — no variations, abbreviations, or pronouns.
+- Do NOT extract trivially generic relationships (e.g. "Entity A exists" or "Entity B is a concept").
+
+-Steps-
+1. Review the entity list and the original text carefully.
+2. For each pair of entities that have a meaningful, text-supported relationship:
+   - source_entity: Name exactly as listed in the entity list.
+   - target_entity: Name exactly as listed in the entity list.
+   - relation: A specific verb phrase describing how the source relates to the target.
+   - relationship_description: A brief explanation of the relationship, based on the text.
+
+3. Output Formatting:
+   - Return the result as valid JSON with a single key: "relationships" (list of relationship objects).
+   - Do NOT include any text, explanation, or markdown outside the JSON structure.
+   - If no relationships are found, return: {{ "relationships": [] }}
+
+-Example-
+Entities:
+- Margaret Hamilton (Person): Software engineer who led the software engineering division at MIT Draper Laboratory.
+- MIT Draper Laboratory (Organization): The laboratory where Margaret Hamilton led the software engineering division.
+- Apollo Program (Event): NASA's human spaceflight program.
+
+Input excerpt: "Margaret Hamilton led the software engineering division at MIT Draper Laboratory.  She and her team developed the onboard flight software for the Apollo program."
+
+Output:
+{{
+  "relationships": [
+    {{
+      "source_entity": "Margaret Hamilton",
+      "target_entity": "MIT Draper Laboratory",
+      "relation": "led division at",
+      "relationship_description": "Margaret Hamilton led the software engineering division at MIT Draper Laboratory."
+    }},
+    {{
+      "source_entity": "Margaret Hamilton",
+      "target_entity": "Apollo Program",
+      "relation": "developed software for",
+      "relationship_description": "Margaret Hamilton and her team developed the onboard flight software for the Apollo program."
+    }}
+  ]
+}}
+
+-Real Data-
+######################
+entities:
+{entities}
+######################
+text: {text}
+######################
+output:

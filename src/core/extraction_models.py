@@ -64,7 +64,8 @@ class Relationship(BaseModel):
 class ExtractionResult(BaseModel):
     """Structured output of entity-relationship extraction.
 
-    This is the top-level model that the LLM must produce.
+    This is the top-level model that the LLM must produce for
+    single-pass extraction (the default path).
     """
 
     entities: List[Entity] = Field(
@@ -105,3 +106,81 @@ class ExtractionResult(BaseModel):
             for r in self.relationships
         ]
         return entity_tuples, relationship_tuples
+
+
+# ------------------------------------------------------------------
+# Two-pass extraction models
+# ------------------------------------------------------------------
+
+
+class EntitiesOnlyResult(BaseModel):
+    """Pass 1 of two-pass extraction: entities only.
+
+    Used when ``use_two_pass=True``.  The LLM produces only entities
+    in the first pass.  Relationships are extracted in a separate
+    second pass that receives the entity list as context.
+    """
+
+    entities: List[Entity] = Field(
+        default_factory=list,
+        description="All entities identified in the text.",
+    )
+
+    def to_tuples(
+        self,
+    ) -> list[tuple[str, str, str]]:
+        """Convert entities to the tuple format for LlamaIndex.
+
+        Returns
+        -------
+        list of (name, type, description)
+        """
+        return [
+            (e.entity_name, e.entity_type, e.entity_description)
+            for e in self.entities
+        ]
+
+    def format_for_relationship_prompt(self) -> str:
+        """Format entities as a human-readable list for the relationship prompt.
+
+        Returns a string like::
+
+            - Margaret Hamilton (Person): Software engineer...
+            - MIT Draper Laboratory (Organization): The laboratory...
+        """
+        lines = []
+        for e in self.entities:
+            lines.append(f"- {e.entity_name} ({e.entity_type}): {e.entity_description}")
+        return "\n".join(lines)
+
+
+class RelationshipsOnlyResult(BaseModel):
+    """Pass 2 of two-pass extraction: relationships only.
+
+    The LLM receives the entity list and the original text, and
+    produces only relationships referencing those entities.
+    """
+
+    relationships: List[Relationship] = Field(
+        default_factory=list,
+        description="All relationships among the provided entities, supported by the text.",
+    )
+
+    def to_tuples(
+        self,
+    ) -> list[tuple[str, str, str, str]]:
+        """Convert relationships to the tuple format for LlamaIndex.
+
+        Returns
+        -------
+        list of (source, target, relation, description)
+        """
+        return [
+            (
+                r.source_entity,
+                r.target_entity,
+                r.relation,
+                r.relationship_description,
+            )
+            for r in self.relationships
+        ]

@@ -47,11 +47,14 @@ server:
 graphrag:
   max_paths_per_chunk: 2
   extraction_prompt: "kg_extract_template.txt"
+  entity_extraction_prompt: "kg_extract_entities.txt"
+  relationship_extraction_prompt: "kg_extract_relationships.txt"
   community_summary_prompt: "community_summary.txt"
   answer_from_summary_prompt: "answer_from_summary.txt"
   aggregate_answers_prompt: "aggregate_answers.txt"
   use_instructor: false
   instructor_max_retries: 3
+  use_two_pass: false
 docker:
   container_name: "neo4j-test"
 """)

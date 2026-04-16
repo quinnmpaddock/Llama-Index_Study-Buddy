@@ -19,6 +19,12 @@ def prompts_dir(tmp_path):
     (prompts / "kg_extract_template.txt").write_text(
         "Extract up to {max_knowledge_triplets} triplets from: {text}", encoding="utf-8"
     )
+    (prompts / "kg_extract_entities.txt").write_text(
+        "Extract entities from: {text}", encoding="utf-8"
+    )
+    (prompts / "kg_extract_relationships.txt").write_text(
+        "Given entities:\n{entities}\nExtract relationships from: {text}", encoding="utf-8"
+    )
     (prompts / "community_summary.txt").write_text(
         "Summarize these relationships.", encoding="utf-8"
     )
@@ -59,7 +65,9 @@ class TestPromptRegistryInit:
         templates = registry.list_templates()
         assert "kg_extract_template.txt" in templates
         assert "community_summary.txt" in templates
-        assert len(templates) == 4
+        assert "kg_extract_entities.txt" in templates
+        assert "kg_extract_relationships.txt" in templates
+        assert len(templates) == 6
 
 
 class TestPromptLoading:

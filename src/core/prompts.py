@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPTS: Dict[str, str] = {
     "kg_extract": "kg_extract_template.txt",
+    "kg_extract_entities": "kg_extract_entities.txt",
+    "kg_extract_relationships": "kg_extract_relationships.txt",
     "community_summary": "community_summary.txt",
     "answer_from_summary": "answer_from_summary.txt",
     "aggregate_answers": "aggregate_answers.txt",
@@ -80,6 +82,8 @@ class PromptRegistry:
         self._filenames: Dict[str, str] = dict(DEFAULT_PROMPTS)
         if config is not None:
             self._filenames["kg_extract"] = getattr(config, "extraction_prompt", DEFAULT_PROMPTS["kg_extract"])
+            self._filenames["kg_extract_entities"] = getattr(config, "entity_extraction_prompt", DEFAULT_PROMPTS["kg_extract_entities"])
+            self._filenames["kg_extract_relationships"] = getattr(config, "relationship_extraction_prompt", DEFAULT_PROMPTS["kg_extract_relationships"])
             self._filenames["community_summary"] = getattr(config, "community_summary_prompt", DEFAULT_PROMPTS["community_summary"])
             self._filenames["answer_from_summary"] = getattr(config, "answer_from_summary_prompt", DEFAULT_PROMPTS["answer_from_summary"])
             self._filenames["aggregate_answers"] = getattr(config, "aggregate_answers_prompt", DEFAULT_PROMPTS["aggregate_answers"])

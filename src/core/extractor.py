@@ -4,6 +4,13 @@ When ``use_instructor=True``, the LLM response is validated against
 Pydantic models (``ExtractionResult``) with automatic retries, guaranteeing
 well-formed output.  When ``False`` (the default, preserving backward
 compatibility), the legacy ``parse_fn`` / ``extract_json`` path is used.
+
+When ``use_two_pass=True``, extraction is split into two LLM calls:
+  1. Extract entities only (using ``kg_extract_entities.txt``)
+  2. Given those entities, extract relationships (using ``kg_extract_relationships.txt``)
+
+This significantly improves relationship quality because the LLM can
+focus on one task at a time.
 """
 
 import asyncio
@@ -25,7 +32,11 @@ from llama_index.core.prompts import PromptTemplate
 from llama_index.core.prompts.default_prompts import DEFAULT_KG_TRIPLET_EXTRACT_PROMPT
 from llama_index.core.schema import BaseNode, MetadataMode, TransformComponent
 
-from core.extraction_models import ExtractionResult
+from core.extraction_models import (
+    EntitiesOnlyResult,
+    ExtractionResult,
+    RelationshipsOnlyResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,24 +82,38 @@ class GraphRAGExtractor(TransformComponent):
     Uses an LLM and a prompt + output parsing to extract paths (i.e.
     triples) and entity/relation descriptions from text.
 
-    When ``use_instructor`` is ``True`` and an ``instructor_client``
-    is provided, the extractor uses the Instructor library for
-    Pydantic-validated structured output with automatic retries.
-    Otherwise, it falls back to the legacy ``parse_fn`` path.
+    Extraction modes
+    ----------------
+    **Single-pass (default)**: One LLM call extracts entities and
+    relationships simultaneously.  Uses ``extract_prompt`` with
+    ``parse_fn`` (legacy) or ``ExtractionResult`` (Instructor).
+
+    **Two-pass** (``use_two_pass=True``): Two sequential LLM calls
+    — first entities, then relationships.  Requires ``entity_prompt``
+    and ``relationship_prompt``.  Significantly improves relationship
+    quality because the LLM focuses on one task at a time.
+
+    **Instructor** (``use_instructor=True``): Pydantic-validated
+    output with automatic retries.  Works with both single-pass and
+    two-pass modes.
 
     Args:
         llm: The language model to use (LlamaIndex LLM).
-        extract_prompt: The prompt template for extraction.
+        extract_prompt: The prompt template for single-pass extraction.
         parse_fn: Legacy parser for raw LLM text (used when
             ``use_instructor=False``).
         num_workers: Parallel extraction workers.
         max_paths_per_chunk: Max entity-relationship pairs per chunk.
         use_instructor: Whether to use Instructor for structured output.
-        instructor_client: Pre-configured ``instructor.Inferring``
-            client (required when ``use_instructor=True``).
+        instructor_client: Pre-configured Instructor client
+            (required when ``use_instructor=True``).
         instructor_max_retries: Retry count for Instructor validation.
-        instructor_model_name: Model name passed to the Instructor
-            client (falls back to ``llm`` model name if not set).
+        instructor_model_name: Model name passed to the Instructor client.
+        use_two_pass: Whether to use two-pass extraction.
+        entity_prompt: Prompt template for Pass 1 (entity extraction).
+            Required when ``use_two_pass=True``.
+        relationship_prompt: Prompt template for Pass 2 (relationship
+            extraction).  Required when ``use_two_pass=True``.
     """
 
     llm: LLM
@@ -100,6 +125,9 @@ class GraphRAGExtractor(TransformComponent):
     instructor_client: Any = None
     instructor_max_retries: int = 3
     instructor_model_name: Optional[str] = None
+    use_two_pass: bool = False
+    entity_prompt: Optional[PromptTemplate] = None
+    relationship_prompt: Optional[PromptTemplate] = None
 
     def __init__(
         self,
@@ -112,10 +140,19 @@ class GraphRAGExtractor(TransformComponent):
         instructor_client: Any = None,
         instructor_max_retries: int = 3,
         instructor_model_name: Optional[str] = None,
+        use_two_pass: bool = False,
+        entity_prompt: Optional[Union[str, PromptTemplate]] = None,
+        relationship_prompt: Optional[Union[str, PromptTemplate]] = None,
     ) -> None:
         """Init params."""
         if isinstance(extract_prompt, str):
             extract_prompt = PromptTemplate(extract_prompt)
+
+        # Convert string prompts to PromptTemplate
+        if isinstance(entity_prompt, str):
+            entity_prompt = PromptTemplate(entity_prompt)
+        if isinstance(relationship_prompt, str):
+            relationship_prompt = PromptTemplate(relationship_prompt)
 
         super().__init__(
             llm=llm or Settings.llm,
@@ -127,13 +164,26 @@ class GraphRAGExtractor(TransformComponent):
             instructor_client=instructor_client,
             instructor_max_retries=instructor_max_retries,
             instructor_model_name=instructor_model_name,
+            use_two_pass=use_two_pass,
+            entity_prompt=entity_prompt,
+            relationship_prompt=relationship_prompt,
         )
 
-        # Validate Instructor configuration
+        # Validate configuration
         if self.use_instructor and self.instructor_client is None:
             raise ValueError(
                 "instructor_client must be provided when use_instructor=True. "
                 "Create one with: instructor.from_openai(openai.OpenAI(...))"
+            )
+        if self.use_two_pass and self.entity_prompt is None:
+            raise ValueError(
+                "entity_prompt must be provided when use_two_pass=True. "
+                "Load it from PromptRegistry: reg.raw('kg_extract_entities')"
+            )
+        if self.use_two_pass and self.relationship_prompt is None:
+            raise ValueError(
+                "relationship_prompt must be provided when use_two_pass=True. "
+                "Load it from PromptRegistry: reg.raw('kg_extract_relationships')"
             )
 
     @classmethod
@@ -156,6 +206,44 @@ class GraphRAGExtractor(TransformComponent):
                 return future.result()
         else:
             return asyncio.run(self.acall(nodes, show_progress=show_progress, **kwargs))
+
+    # ------------------------------------------------------------------
+    # Helper: attach extracted data to a node
+    # ------------------------------------------------------------------
+
+    def _attach_to_node(
+        self,
+        node: BaseNode,
+        entities: list[tuple[str, str, str]],
+        relationships: list[tuple[str, str, str, str]],
+    ) -> BaseNode:
+        """Attach extracted entities and relationships to a node's metadata."""
+        existing_nodes = node.metadata.pop(KG_NODES_KEY, [])
+        existing_relations = node.metadata.pop(KG_RELATIONS_KEY, [])
+
+        for entity, entity_type, description in entities:
+            entity_metadata = node.metadata.copy()
+            entity_metadata["entity_description"] = description
+            entity_node = EntityNode(
+                name=entity, label=entity_type, properties=entity_metadata
+            )
+            existing_nodes.append(entity_node)
+
+        for triple in relationships:
+            subj, obj, rel, description = triple
+            relation_metadata = node.metadata.copy()
+            relation_metadata["relationship_description"] = description
+            rel_node = Relation(
+                label=rel,
+                source_id=subj,
+                target_id=obj,
+                properties=relation_metadata,
+            )
+            existing_relations.append(rel_node)
+
+        node.metadata[KG_NODES_KEY] = existing_nodes
+        node.metadata[KG_RELATIONS_KEY] = existing_relations
+        return node
 
     # ------------------------------------------------------------------
     # Instructor-based extraction
@@ -192,33 +280,123 @@ class GraphRAGExtractor(TransformComponent):
             result = ExtractionResult()
 
         entities, relationships = result.to_tuples()
+        return self._attach_to_node(node, entities, relationships)
 
-        existing_nodes = node.metadata.pop(KG_NODES_KEY, [])
-        existing_relations = node.metadata.pop(KG_RELATIONS_KEY, [])
+    # ------------------------------------------------------------------
+    # Two-pass extraction
+    # ------------------------------------------------------------------
 
-        for entity, entity_type, description in entities:
-            entity_metadata = node.metadata.copy()
-            entity_metadata["entity_description"] = description
-            entity_node = EntityNode(
-                name=entity, label=entity_type, properties=entity_metadata
+    async def _aextract_two_pass(self, node: BaseNode) -> BaseNode:
+        """Two-pass extraction: entities first, then relationships.
+
+        Pass 1 extracts entities only.  Pass 2 takes those entities
+        and the original text and extracts relationships between them.
+        This separation lets the LLM focus on one task at a time,
+        significantly improving relationship quality.
+        """
+        text = node.get_content(metadata_mode=MetadataMode.LLM)
+        assert self.entity_prompt is not None
+        assert self.relationship_prompt is not None
+
+        # --- Pass 1: Extract entities ---
+        if self.use_instructor and self.instructor_client is not None:
+            # Instructor path for structured entity output
+            entity_prompt_text = self.entity_prompt.format(
+                text=text,
+                max_knowledge_triplets=self.max_paths_per_chunk,
             )
-            existing_nodes.append(entity_node)
+            try:
+                entities_result: EntitiesOnlyResult = (
+                    await self.instructor_client.chat.completions.create(
+                        model=self.instructor_model_name,
+                        response_model=EntitiesOnlyResult,
+                        messages=[{"role": "user", "content": entity_prompt_text}],
+                        max_retries=self.instructor_max_retries,
+                    )
+                )
+            except Exception:
+                logger.warning("Two-pass Pass 1 (Instructor) failed; returning empty node")
+                return self._attach_to_node(node, [], [])
+            entity_tuples = entities_result.to_tuples()
+            entities_formatted = entities_result.format_for_relationship_prompt()
+        else:
+            # Legacy parse_fn path for entity extraction
+            try:
+                llm_response = await self.llm.apredict(
+                    self.entity_prompt,
+                    text=text,
+                    max_knowledge_triplets=self.max_paths_per_chunk,
+                )
+            except Exception:
+                raise
 
-        for triple in relationships:
-            subj, obj, rel, description = triple
-            relation_metadata = node.metadata.copy()
-            relation_metadata["relationship_description"] = description
-            rel_node = Relation(
-                label=rel,
-                source_id=subj,
-                target_id=obj,
-                properties=relation_metadata,
+            try:
+                # Parse entities-only JSON: {"entities": [...]}
+                data = json.loads(
+                    __import__("re").search(r"\{.*\}", llm_response, __import__("re").DOTALL).group(0)
+                )
+                entity_tuples = [
+                    (e["entity_name"], e["entity_type"], e["entity_description"])
+                    for e in data.get("entities", [])
+                ]
+                # Format entities for the relationship prompt
+                entities_formatted = "\n".join(
+                    f"- {name} ({etype}): {desc}"
+                    for name, etype, desc in entity_tuples
+                )
+            except (json.JSONDecodeError, KeyError, AttributeError) as e:
+                logger.warning("Two-pass Pass 1 (legacy) failed: %s: %s", type(e).__name__, e)
+                return self._attach_to_node(node, [], [])
+
+        # --- Pass 2: Extract relationships given entities ---
+        if self.use_instructor and self.instructor_client is not None:
+            # Instructor path for structured relationship output
+            rel_prompt_text = self.relationship_prompt.format(
+                text=text,
+                entities=entities_formatted,
             )
-            existing_relations.append(rel_node)
+            try:
+                rels_result: RelationshipsOnlyResult = (
+                    await self.instructor_client.chat.completions.create(
+                        model=self.instructor_model_name,
+                        response_model=RelationshipsOnlyResult,
+                        messages=[{"role": "user", "content": rel_prompt_text}],
+                        max_retries=self.instructor_max_retries,
+                    )
+                )
+            except Exception:
+                logger.warning("Two-pass Pass 2 (Instructor) failed; returning entities without relationships")
+                return self._attach_to_node(node, entity_tuples, [])
+            relationship_tuples = rels_result.to_tuples()
+        else:
+            # Legacy parse_fn path for relationship extraction
+            try:
+                llm_response = await self.llm.apredict(
+                    self.relationship_prompt,
+                    text=text,
+                    entities=entities_formatted,
+                )
+            except Exception:
+                raise
 
-        node.metadata[KG_NODES_KEY] = existing_nodes
-        node.metadata[KG_RELATIONS_KEY] = existing_relations
-        return node
+            try:
+                data = json.loads(
+                    __import__("re").search(r"\{.*\}", llm_response, __import__("re").DOTALL).group(0)
+                )
+                relationship_tuples = [
+                    (
+                        r["source_entity"],
+                        r["target_entity"],
+                        r["relation"],
+                        r["relationship_description"],
+                    )
+                    for r in data.get("relationships", [])
+                ]
+            except (json.JSONDecodeError, KeyError, AttributeError) as e:
+                logger.warning("Two-pass Pass 2 (legacy) failed: %s: %s", type(e).__name__, e)
+                return self._attach_to_node(node, entity_tuples, [])
+
+        return self._attach_to_node(node, entity_tuples, relationship_tuples)
 
     # ------------------------------------------------------------------
     # Legacy parse_fn extraction
@@ -249,32 +427,7 @@ class GraphRAGExtractor(TransformComponent):
             entities = []
             entities_relationship = []
 
-        existing_nodes = node.metadata.pop(KG_NODES_KEY, [])
-        existing_relations = node.metadata.pop(KG_RELATIONS_KEY, [])
-
-        for entity, entity_type, description in entities:
-            entity_metadata = node.metadata.copy()
-            entity_metadata["entity_description"] = description
-            entity_node = EntityNode(
-                name=entity, label=entity_type, properties=entity_metadata
-            )
-            existing_nodes.append(entity_node)
-
-        for triple in entities_relationship:
-            subj, obj, rel, description = triple
-            relation_metadata = node.metadata.copy()
-            relation_metadata["relationship_description"] = description
-            rel_node = Relation(
-                label=rel,
-                source_id=subj,
-                target_id=obj,
-                properties=relation_metadata,
-            )
-            existing_relations.append(rel_node)
-
-        node.metadata[KG_NODES_KEY] = existing_nodes
-        node.metadata[KG_RELATIONS_KEY] = existing_relations
-        return node
+        return self._attach_to_node(node, entities, entities_relationship)
 
     # ------------------------------------------------------------------
     # Dispatcher
@@ -285,15 +438,21 @@ class GraphRAGExtractor(TransformComponent):
     ) -> List[BaseNode]:
         """Extract triples from nodes async.
 
-        Routes to :meth:`_aextract_with_instructor` when
-        ``use_instructor=True``, otherwise uses the legacy
-        :meth:`_aextract` path.
+        Routes to the appropriate extraction method:
+
+        - ``use_two_pass=True`` → :meth:`_aextract_two_pass`
+          (may use Instructor or legacy internally)
+        - ``use_instructor=True`` → :meth:`_aextract_with_instructor`
+          (single-pass)
+        - default → :meth:`_aextract` (single-pass, legacy)
         """
-        extract_fn = (
-            self._aextract_with_instructor
-            if self.use_instructor
-            else self._aextract
-        )
+        if self.use_two_pass:
+            extract_fn = self._aextract_two_pass
+        elif self.use_instructor:
+            extract_fn = self._aextract_with_instructor
+        else:
+            extract_fn = self._aextract
+
         jobs = [extract_fn(node) for node in nodes]
 
         return await run_jobs(
