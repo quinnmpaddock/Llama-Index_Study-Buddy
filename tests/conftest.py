@@ -50,6 +50,8 @@ graphrag:
   community_summary_prompt: "community_summary.txt"
   answer_from_summary_prompt: "answer_from_summary.txt"
   aggregate_answers_prompt: "aggregate_answers.txt"
+  use_instructor: false
+  instructor_max_retries: 3
 docker:
   container_name: "neo4j-test"
 """)

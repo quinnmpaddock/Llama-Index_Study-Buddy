@@ -69,6 +69,8 @@ class GraphRAGConfig:
         self.community_summary_prompt = config_dict.get("community_summary_prompt", "community_summary.txt")
         self.answer_from_summary_prompt = config_dict.get("answer_from_summary_prompt", "answer_from_summary.txt")
         self.aggregate_answers_prompt = config_dict.get("aggregate_answers_prompt", "aggregate_answers.txt")
+        self.use_instructor = config_dict.get("use_instructor", False)
+        self.instructor_max_retries = config_dict.get("instructor_max_retries", 3)
 
 
 class DockerConfig:

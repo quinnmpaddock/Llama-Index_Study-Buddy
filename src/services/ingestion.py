@@ -291,11 +291,28 @@ class IngestionService:
 
             # 4. Create knowledge graph extractor
             logger.info("Creating GraphRAG extractor...")
+            use_instructor = getattr(self.config.graphrag, "use_instructor", False)
+            instructor_client = None
+
+            if use_instructor:
+                from core.extractor import create_instructor_client
+                logger.info("Instructor-structured extraction enabled (max_retries=%d)",
+                            self.config.graphrag.instructor_max_retries)
+                instructor_client = create_instructor_client(
+                    api_key=self.config.llm.api_key,
+                    api_base=self.config.llm.api_base,
+                    model=self.config.llm.model,
+                    max_retries=self.config.graphrag.instructor_max_retries,
+                )
+
             kg_extractor = GraphRAGExtractor(
                 llm=llm,
                 extract_prompt=kg_triplet_extract_tmpl,
                 max_paths_per_chunk=2,
                 parse_fn=parse_fn,
+                use_instructor=use_instructor,
+                instructor_client=instructor_client,
+                instructor_model_name=self.config.llm.model,
             )
 
             # 5. Connect to Neo4j
