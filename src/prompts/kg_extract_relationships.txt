@@ -1,3 +1,10 @@
+---
+version: 1
+description: "Pass 2 relationship extraction given pre-extracted entity list"
+model_target: gpt-4
+last_evaluated: 2026-04-16
+eval_score: 0.0
+---
 -Goal-
 Given a text document and a list of previously extracted entities, identify all meaningful relationships among those entities. You are ONLY extracting relationships in this pass — the entities are already identified and listed for you.
 

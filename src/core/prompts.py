@@ -22,10 +22,34 @@ Design principles (inspired by Hermes Agent's prompt architecture):
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Frontmatter handling
+# ---------------------------------------------------------------------------
+
+_FRONTMATTER_PATTERN = re.compile(r"^---[ \t]*\n(?:.*?\n)?---[ \t]*\n", re.DOTALL)
+
+
+def _strip_frontmatter(text: str) -> str:
+    """Strip YAML frontmatter from a prompt template.
+
+    Frontmatter is a ``---``-delimited block at the very start of the file::
+
+        ---
+        version: 3
+        description: "..."
+        ---
+        (prompt content follows)
+
+    The frontmatter is used for prompt versioning metadata and should
+    not appear in templates passed to the LLM.
+    """
+    return _FRONTMATTER_PATTERN.sub("", text, count=1)
 
 # ---------------------------------------------------------------------------
 # Default prompt filenames (matched to GraphRAGConfig defaults)
@@ -149,7 +173,9 @@ class PromptRegistry:
         """Load a template file, caching the result.
 
         Templates are loaded once and cached for the lifetime of the
-        registry instance (frozen-snapshot pattern).
+        registry instance (frozen-snapshot pattern).  YAML frontmatter
+        (``---``-delimited) is stripped before caching so it doesn't
+        interfere with ``str.format_map()`` substitution.
         """
         if filename not in self._cache:
             path = self._prompts_dir / filename
@@ -158,9 +184,30 @@ class PromptRegistry:
                     f"Prompt template not found: {path}.  "
                     f"Ensure the file exists in {self._prompts_dir}/."
                 )
-            self._cache[filename] = path.read_text(encoding="utf-8")
+            content = path.read_text(encoding="utf-8")
+            # Strip YAML frontmatter if present
+            content = _strip_frontmatter(content)
+            self._cache[filename] = content
             logger.debug("Loaded prompt template: %s", filename)
         return self._cache[filename]
+
+    def version_info(self, name: str) -> "PromptVersion":
+        """Load and return version metadata for a prompt template.
+
+        Parameters
+        ----------
+        name :
+            Template filename or short key.
+
+        Returns
+        -------
+        PromptVersion
+            Metadata including version, description, model_target, etc.
+        """
+        from core.prompt_versioning import load_versioned_prompt
+        filename = self._filenames.get(name, name)
+        path = self._prompts_dir / filename
+        return load_versioned_prompt(path)
 
     # ------------------------------------------------------------------
     # Convenience: expose prompt directory for validation

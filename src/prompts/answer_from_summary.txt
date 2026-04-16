@@ -1,3 +1,10 @@
+---
+version: 1
+description: "Answer generation from community summary"
+model_target: gpt-4
+last_evaluated: 2026-04-16
+eval_score: 0.0
+---
 Given the community summary: {community_summary}, how would you answer the following query? Query: {query}
 
 IMPORTANT: Preserve all source citations [Source: ...] from the summary in your answer. Do not remove or modify any citation markers.

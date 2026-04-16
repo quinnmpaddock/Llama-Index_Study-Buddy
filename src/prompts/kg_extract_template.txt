@@ -1,3 +1,10 @@
+---
+version: 3
+description: "Single-pass extraction with entity type taxonomy, coreference resolution, 2 examples, negative constraints"
+model_target: gpt-4
+last_evaluated: 2026-04-16
+eval_score: 0.0
+---
 -Goal-
 Given a text document, identify all entities and the relationships among them, then return the result as structured JSON.
 

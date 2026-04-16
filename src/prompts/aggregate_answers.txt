@@ -1,1 +1,8 @@
+---
+version: 1
+description: "Aggregate multiple intermediate answers into a final response"
+model_target: gpt-4
+last_evaluated: 2026-04-16
+eval_score: 0.0
+---
 Combine the following intermediate answers into a final, concise response. IMPORTANT: You MUST preserve every bracketed citation token exactly as it appears (for example `[Source: ...]` and `[test_data0.pdf]`). Every citation token that appears in the intermediate answers must appear in the final output unchanged. Do not remove, rewrite, normalize, or summarize citation markers.

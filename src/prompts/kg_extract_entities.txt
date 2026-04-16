@@ -1,3 +1,10 @@
+---
+version: 1
+description: "Pass 1 entity-only extraction with taxonomy and coreference resolution"
+model_target: gpt-4
+last_evaluated: 2026-04-16
+eval_score: 0.0
+---
 -Goal-
 Given a text document, identify all entities and their types. You are ONLY extracting entities in this pass — relationships will be identified separately.
 

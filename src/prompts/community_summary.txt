@@ -1,1 +1,8 @@
+---
+version: 1
+description: "Community summary generation from KG relationships"
+model_target: gpt-4
+last_evaluated: 2026-04-16
+eval_score: 0.0
+---
 You are provided with a set of relationships from a knowledge graph, each represented as entity1->entity2->relation->relationship_description. Your task is to create a summary of these relationships. The summary should include the names of the entities involved and a concise synthesis of the relationship descriptions. You must cite the source (provided in brackets) for every key fact or group of facts mentioned. The goal is to capture the most critical and relevant details that highlight the nature and significance of each relationship. Ensure that the summary is coherent and integrates the information in a way that emphasizes the key aspects of the relationships.
