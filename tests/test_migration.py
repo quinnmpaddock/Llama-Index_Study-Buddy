@@ -1,4 +1,4 @@
-"""Tests for legacy summaries/ migration and workspace-scoped data storage."""
+"""Tests for legacy summaries/ migration and data storage."""
 
 import json
 import os
@@ -81,89 +81,47 @@ class TestMigrateLegacySummaries:
         # Legacy file should NOT have been copied
         assert not (target_summaries / "other_file.json").exists()
 
-    def test_community_service_workspace_scoped_storage(self, tmp_path):
-        """CommunityService stores and retrieves data in workspace-scoped paths."""
+    def test_community_service_default_storage(self, tmp_path):
+        """CommunityService stores and retrieves data in default/summaries paths."""
         data_dir = tmp_path / "data"
         svc = CommunityService(data_dir=str(data_dir))
 
-        # Save to default workspace
+        # Save summaries
         svc.save_summaries(
-            workspace_id="default",
             community_summaries={"1": "alpha community", "2": "beta"},
             entity_info={"entityA": [1, 2], "entityB": [2]},
             version="2026-04-13_120000",
         )
 
-        # Save to another workspace
-        svc.save_summaries(
-            workspace_id="biology",
-            community_summaries={"1": "bio community"},
-            entity_info={"DNA": [1]},
-            version="2026-04-13_130000",
-        )
-
-        # Verify files exist in workspace-scoped paths
+        # Verify files exist in default/summaries path
         assert (data_dir / "default" / "summaries" / "community_summaries_2026-04-13_120000.json").exists()
-        assert (data_dir / "biology" / "summaries" / "community_summaries_2026-04-13_130000.json").exists()
+        assert (data_dir / "default" / "summaries" / "entity_info_2026-04-13_120000.json").exists()
 
-        # Load and verify each workspace independently
-        default_s, default_e = svc.load_summaries_and_entity_info("default")
-        assert 1 in default_s
-        assert "entityA" in default_e
-
-        bio_s, bio_e = svc.load_summaries_and_entity_info("biology")
-        assert 1 in bio_s
-        assert "DNA" in bio_e
-
-        # Verify they don't leak across workspaces
-        assert 2 not in bio_s
-        assert "entityA" not in bio_e
-
-    def test_community_service_default_workspace_fallback(self, tmp_path):
-        """When workspace_id is None but data_dir is set, 'default' is used."""
-        data_dir = tmp_path / "data"
-        svc = CommunityService(data_dir=str(data_dir))
-
-        # Save with explicit workspace_id
-        svc.save_summaries(
-            workspace_id="default",
-            community_summaries={"1": "summary"},
-            entity_info={"e1": [1]},
-            version="v_default",
-        )
-
-        # Load with workspace_id=None should use 'default'
+        # Load and verify
         summaries, entities = svc.load_summaries_and_entity_info()
         assert 1 in summaries
-        assert "e1" in entities
+        assert "entityA" in entities
 
-    def test_community_service_list_versions_scoped(self, tmp_path):
-        """list_versions returns only versions for the requested workspace."""
+    def test_community_service_list_versions(self, tmp_path):
+        """list_versions returns versions stored in default/summaries."""
         data_dir = tmp_path / "data"
         svc = CommunityService(data_dir=str(data_dir))
 
-        # Create versions in two workspaces
-        svc.save_summaries("default", {"1": "s1"}, {"e1": [1]}, version="v_default")
-        svc.save_summaries("biology", {"1": "s1"}, {"e1": [1]}, version="v_biology")
+        svc.save_summaries({"1": "s1"}, {"e1": [1]}, version="v_default")
 
-        # Each workspace should see only its own versions
-        current_d, versions_d = svc.list_versions("default")
-        assert len(versions_d) == 1
-        assert versions_d[0]["version"] == "v_default"
+        current, versions = svc.list_versions()
+        assert current is not None
+        assert current["version"] == "v_default"
+        assert len(versions) == 1
 
-        current_b, versions_b = svc.list_versions("biology")
-        assert len(versions_b) == 1
-        assert versions_b[0]["version"] == "v_biology"
-
-    def test_community_service_cleanup_scoped(self, tmp_path):
-        """cleanup_versions only affects the specified workspace."""
+    def test_community_service_cleanup(self, tmp_path):
+        """cleanup_versions removes old versions."""
         data_dir = tmp_path / "data"
         svc = CommunityService(data_dir=str(data_dir))
 
-        # Create multiple versions in default
+        # Create multiple versions
         for v in ["v_old", "v_mid", "v_new"]:
-            svc.save_summaries("default", {"1": f"s_{v}"}, {"e1": [1]}, version=v)
+            svc.save_summaries({"1": f"s_{v}"}, {"e1": [1]}, version=v)
 
-        # Cleanup in default should not affect biology (which has no versions)
-        deleted, kept = svc.cleanup_versions("default", keep=2)
+        deleted, kept = svc.cleanup_versions(keep=2)
         assert len(deleted) >= 2  # entity_info + community_summaries for v_old

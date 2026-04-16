@@ -1,6 +1,5 @@
 """Tests for Pydantic models."""
-from src.models import WorkspaceCreate, WorkspaceInfo, GraphQueryResponse, QueryRequest, slugify
-from src.workspace import neo4j_db_name
+from src.models import GraphQueryResponse, QueryRequest, slugify
 
 
 def test_slugify_basic():
@@ -22,34 +21,6 @@ def test_slugify_leading_trailing_spaces():
 def test_slugify_unicode():
     result = slugify("Café Résumé")
     assert "cafe" in result or "caf" in result  # unicode normalization varies
-
-
-def test_workspace_create_auto_slug():
-    req = WorkspaceCreate(name="ML Research", description="My ML knowledge base")
-    assert req.get_slug() == "ml-research"
-
-
-def test_workspace_create_custom_slug():
-    req = WorkspaceCreate(name="ML Research", slug="custom-slug", description="test")
-    assert req.get_slug() == "custom-slug"
-
-
-def test_workspace_create_default_description():
-    req = WorkspaceCreate(name="Test")
-    assert req.description == ""
-
-
-def test_workspace_info_model():
-    info = WorkspaceInfo(
-        id="ml-research",
-        name="ML Research",
-        description="My ML knowledge base",
-        neo4j_database=neo4j_db_name("ml-research"),
-        created_at="2026-04-13T00:00:00",
-        updated_at="2026-04-13T00:00:00",
-    )
-    assert info.id == "ml-research"
-    assert info.entity_count == 0  # default
 
 
 def test_query_request_defaults():

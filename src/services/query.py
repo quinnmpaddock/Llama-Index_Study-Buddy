@@ -1,12 +1,9 @@
 """Query service — thin wrapper around the GraphRAGQueryEngine.
 
-Delegates to ``app.state.engine`` for backward compatibility.  The
-*workspace_id* parameter is accepted for forward compatibility but is
-currently unused.
+Delegates to ``app.state.engine`` for backward compatibility.
 """
 
 import logging
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +31,6 @@ class QueryService:
         self,
         query_str: str,
         similarity_top_k: int = 20,
-        workspace_id: Optional[str] = None,
     ) -> dict:
         """Execute an async-compatible query against the knowledge graph.
 

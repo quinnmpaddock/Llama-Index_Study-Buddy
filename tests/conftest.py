@@ -19,20 +19,10 @@ FIXTURES_DIR = TESTS_DIR / "fixtures"
 
 @pytest.fixture
 def tmp_data_dir(tmp_path):
-    """Provide a temporary data directory for workspace tests."""
+    """Provide a temporary data directory for tests."""
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     return data_dir
-
-
-@pytest.fixture
-def sample_workspace_config():
-    """Provide a sample workspace config dict for tests."""
-    return {
-        "llm": {"model": "test-model"},
-        "embedding": {"model": "test-embedding"},
-        "graphrag": {"max_paths_per_chunk": 5},
-    }
 
 
 @pytest.fixture

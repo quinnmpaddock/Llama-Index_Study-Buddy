@@ -96,7 +96,7 @@ def parse_fn(response_str: str):
 class IngestionService:
     """Manage background document ingestion tasks."""
 
-    def __init__(self, config, workspace_registry=None):
+    def __init__(self, config):
         """Initialise the service.
 
         Parameters
@@ -104,13 +104,8 @@ class IngestionService:
         config:
             A ``Config`` object with ``llm``, ``embedding``, ``neo4j``, and
             ``graphrag`` attributes.
-        workspace_registry:
-            Optional :class:`WorkspaceRegistry` for multi-workspace
-            support (currently unused but accepted for forward
-            compatibility).
         """
         self.config = config
-        self.workspace_registry = workspace_registry
         self._ingestion_status: Dict[str, dict] = {}
         self._state_lock = threading.Lock()
         # ``app.state`` reference — set by :meth:`attach_state` when the
@@ -133,7 +128,6 @@ class IngestionService:
         self,
         directory: str,
         files: Optional[List[str]] = None,
-        workspace_id: Optional[str] = None,
     ) -> Tuple[str, dict, List[str]]:
         """Validate inputs and enqueue a background ingestion task.
 
@@ -203,7 +197,6 @@ class IngestionService:
         directory: str,
         files_to_process: List[str],
         task_id: str,
-        workspace_id: Optional[str] = None,
     ) -> None:
         """Run the complete ingestion pipeline (called in a background thread).
 
@@ -349,13 +342,12 @@ class IngestionService:
 
             # 8. Save summaries (via CommunityService)
             community_svc = CommunityService(
-                data_dir=self._get_data_dir(workspace_id)
+                data_dir=str(self._app_state.data_dir) if hasattr(self._app_state, 'data_dir') else None
             )
             raw_summaries = index.property_graph_store.community_summary
             entity_info = index.property_graph_store.entity_info
 
             community_svc.save_summaries(
-                workspace_id=workspace_id,
                 community_summaries=raw_summaries,
                 entity_info=entity_info,
             )
@@ -431,12 +423,6 @@ class IngestionService:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-
-    def _get_data_dir(self, workspace_id: Optional[str]) -> Optional[str]:
-        """Return the data directory for a workspace, or ``None`` for legacy."""
-        if self.workspace_registry is not None:
-            return str(self.workspace_registry.data_dir)
-        return None
 
     def _resolve_files(
         self, dir_root: Path, filenames: List[str]

@@ -1,8 +1,8 @@
 """Community summary persistence and versioning service.
 
 Handles loading, saving, listing, and cleaning up community summary
-snapshots.  Works with both the legacy ``summaries/`` directory (no
-workspace) and per-workspace ``data/<workspace_id>/summaries/`` paths.
+snapshots.  Works with both the legacy ``summaries/`` directory and
+the ``data/default/summaries/`` path.
 """
 
 import glob
@@ -29,9 +29,8 @@ class CommunityService:
         Parameters
         ----------
         data_dir:
-            Root data directory that may contain per-workspace sub-dirs.
-            If *None*, the legacy ``summaries/`` path is used for backward
-            compatibility.
+            Root data directory.  If *None*, the legacy ``summaries/``
+            path is used for backward compatibility.
         """
         self.data_dir = data_dir  # may be None → use legacy path
 
@@ -39,21 +38,13 @@ class CommunityService:
     # Path helpers
     # ------------------------------------------------------------------
 
-    def _summaries_dir(self, workspace_id: Optional[str] = None) -> str:
-        """Return the summaries directory for *workspace_id*.
+    def _summaries_dir(self) -> str:
+        """Return the summaries directory.
 
-        If *workspace_id* is ``None`` and *data_dir* is set, the ``default``
-        workspace sub-dir is used.  If both are ``None``, the legacy
-        ``summaries/`` directory is returned.
+        If *data_dir* is set, uses ``<data_dir>/default/summaries/``.
+        Otherwise falls back to the legacy ``summaries/`` directory.
         """
-        if workspace_id:
-            if self.data_dir:
-                path = os.path.join(self.data_dir, workspace_id, "summaries")
-            else:
-                path = os.path.join(
-                    _PROJECT_ROOT, "data", workspace_id, "summaries"
-                )
-        elif self.data_dir:
+        if self.data_dir:
             path = os.path.join(self.data_dir, "default", "summaries")
         else:
             path = _DEFAULT_SUMMARIES_DIR
@@ -65,9 +56,7 @@ class CommunityService:
     # Snapshot helpers (extracted from app.py)
     # ------------------------------------------------------------------
 
-    def find_most_recent_snapshot(
-        self, workspace_id: Optional[str] = None
-    ) -> Optional[str]:
+    def find_most_recent_snapshot(self) -> Optional[str]:
         """Scan for the most recent *complete* snapshot pair.
 
         A complete snapshot has both ``community_summaries_<version>.json``
@@ -76,7 +65,7 @@ class CommunityService:
         Returns the version string (e.g. ``2026-04-08_150308``) or
         ``None`` if no complete pair exists.
         """
-        summaries_dir = self._summaries_dir(workspace_id)
+        summaries_dir = self._summaries_dir()
 
         entity_files = glob.glob(
             os.path.join(summaries_dir, "entity_info_*.json")
@@ -130,7 +119,7 @@ class CommunityService:
         return most_recent.strftime("%Y-%m-%d_%H%M%S")
 
     def load_summaries_and_entity_info(
-        self, workspace_id: Optional[str] = None
+        self,
     ) -> Tuple[Dict, Dict]:
         """Load community summaries and entity info.
 
@@ -143,7 +132,7 @@ class CommunityService:
         Returns ``(community_summaries, entity_info)`` — either as loaded
         data or empty dicts when nothing is found.
         """
-        summaries_dir = self._summaries_dir(workspace_id)
+        summaries_dir = self._summaries_dir()
         current_path = os.path.join(summaries_dir, "current.json")
 
         def _load_version(version: str, source: str = "versioned"):
@@ -189,7 +178,7 @@ class CommunityService:
                 )
 
         # 2. Scan for most recent snapshot
-        most_recent_version = self.find_most_recent_snapshot(workspace_id)
+        most_recent_version = self.find_most_recent_snapshot()
         if most_recent_version:
             logger.info(
                 "Auto-detected most recent snapshot: %s", most_recent_version
@@ -230,7 +219,6 @@ class CommunityService:
 
     def save_summaries(
         self,
-        workspace_id: Optional[str],
         community_summaries: Dict,
         entity_info: Dict,
         version: Optional[str] = None,
@@ -239,7 +227,7 @@ class CommunityService:
 
         Returns the version string used for the file names.
         """
-        summaries_dir = self._summaries_dir(workspace_id)
+        summaries_dir = self._summaries_dir()
 
         if version is None:
             version = datetime.now().strftime("%Y-%m-%d_%H%M%S")
@@ -285,14 +273,14 @@ class CommunityService:
     # ------------------------------------------------------------------
 
     def list_versions(
-        self, workspace_id: Optional[str] = None
+        self,
     ) -> Tuple[Optional[dict], List[dict]]:
         """Return ``(current_version_info, list_of_version_dicts)``.
 
         Each version dict has keys ``version``, ``filename``, ``modified``,
         ``size_bytes``.
         """
-        summaries_dir = self._summaries_dir(workspace_id)
+        summaries_dir = self._summaries_dir()
 
         pattern = os.path.join(summaries_dir, "community_summaries_*.json")
         summary_files = glob.glob(pattern)
@@ -326,12 +314,10 @@ class CommunityService:
 
         return current, versions
 
-    def get_current_version(
-        self, workspace_id: Optional[str] = None
-    ) -> Optional[dict]:
+    def get_current_version(self) -> Optional[dict]:
         """Return the content of ``current.json`` or ``None``."""
         current_path = os.path.join(
-            self._summaries_dir(workspace_id), "current.json"
+            self._summaries_dir(), "current.json"
         )
         if not os.path.exists(current_path):
             return None
@@ -341,10 +327,9 @@ class CommunityService:
     def get_version(
         self,
         version: str,
-        workspace_id: Optional[str] = None,
     ) -> Optional[dict]:
         """Return ``{version, community_summaries, entity_info}`` or ``None``."""
-        summaries_dir = self._summaries_dir(workspace_id)
+        summaries_dir = self._summaries_dir()
         summary_file = os.path.join(
             summaries_dir, f"community_summaries_{version}.json"
         )
@@ -369,7 +354,6 @@ class CommunityService:
 
     def cleanup_versions(
         self,
-        workspace_id: Optional[str] = None,
         keep: int = 5,
     ) -> Tuple[List[str], List[str]]:
         """Delete old summary versions, keeping *keep* newest.
@@ -380,7 +364,7 @@ class CommunityService:
         if keep < 1:
             raise ValueError("Must keep at least 1 version")
 
-        summaries_dir = self._summaries_dir(workspace_id)
+        summaries_dir = self._summaries_dir()
 
         pattern = os.path.join(summaries_dir, "community_summaries_*.json")
         summary_files = glob.glob(pattern)

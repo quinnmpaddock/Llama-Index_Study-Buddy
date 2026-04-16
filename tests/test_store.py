@@ -1,8 +1,8 @@
-"""Tests for GraphRAGStore workspace awareness in core/store.py.
+"""Tests for GraphRAGStore in core/store.py.
 
 Since the test environment doesn't have a working Neo4j/numpy stack,
 we mock the llama_index dependencies at import time and only test the
-workspace-aware logic that doesn't require a real database connection.
+logic that doesn't require a real database connection.
 """
 import json
 import os
@@ -78,7 +78,6 @@ for mod_name, mod_mock in _mock_llama_index_modules.items():
 
 # Now we can import
 from core.store import GraphRAGStore
-from workspace import neo4j_db_name
 
 
 def _make_store(**kwargs):
@@ -87,18 +86,11 @@ def _make_store(**kwargs):
     Since we've mocked the base class, we can call __init__ normally.
     The fake Neo4jPropertyGraphStore just sets attributes from kwargs.
     """
-    workspace_id = kwargs.pop("workspace_id", None)
     data_dir = kwargs.pop("data_dir", None)
     entity_info = kwargs.pop("entity_info", {})
     community_summary = kwargs.pop("community_summary", {})
     llm = kwargs.pop("llm", MagicMock())
-    graph_name = kwargs.pop("graph_name", None)
-
-    # Determine database name
-    if workspace_id:
-        database = neo4j_db_name(workspace_id)
-    else:
-        database = graph_name or "neo4j"
+    database = kwargs.pop("database", "neo4j")
 
     store = GraphRAGStore(
         username="neo4j",
@@ -110,122 +102,44 @@ def _make_store(**kwargs):
         community_summary=community_summary,
         refresh_schema=False,
         create_indexes=False,
-        workspace_id=workspace_id,
         data_dir=data_dir,
     )
     return store
 
 
-class TestNeo4jDbName:
-    """Test the neo4j_db_name utility used by GraphRAGStore."""
-
-    def test_neo4j_db_name_hyphenated(self):
-        result = neo4j_db_name("ml-research")
-        assert result.startswith("sb_")
-        assert "ml_research" in result
-        assert len(result) <= 63
-
-    def test_neo4j_db_name_simple(self):
-        result = neo4j_db_name("bio")
-        assert result.startswith("sb_")
-        assert "bio" in result
-
-    def test_neo4j_db_name_truncation(self):
-        long_id = "a" * 70
-        assert len(neo4j_db_name(long_id)) <= 63
-
-
 class TestGraphRAGStoreInit:
-    """Tests for the workspace_id-aware initialization logic."""
+    """Tests for GraphRAGStore initialization."""
 
-    def test_default_graph_name_no_workspace(self):
-        """Without workspace_id, graph_name should be the default database name."""
+    def test_default_graph_name(self):
+        """graph_name should be the database name passed to constructor."""
         store = _make_store()
         assert store.graph_name == "neo4j"
-        assert store.workspace_id is None
 
-    def test_workspace_scoped_database_name(self):
-        """When workspace_id is provided, graph_name should be neo4j_db_name(workspace_id)."""
-        store = _make_store(workspace_id="ml-research")
-        assert store.graph_name == neo4j_db_name("ml-research")
-        assert store.workspace_id == "ml-research"
-
-    def test_workspace_scoped_database_name_simple(self):
-        store = _make_store(workspace_id="bio")
-        assert store.graph_name == neo4j_db_name("bio")
+    def test_custom_database_name(self):
+        """When a custom database is provided, graph_name should reflect it."""
+        store = _make_store(database="mydb")
+        assert store.graph_name == "mydb"
 
 
 class TestGraphRAGStoreGDSProjection:
-    """Tests for workspace-scoped GDS projection naming in build_communities.
+    """Tests for GDS projection naming in build_communities.
 
-    These tests validate the expected naming convention used by
-    build_communities (store.workspace_id, store.graph_name and
-    neo4j_db_name) without requiring a live Neo4j connection.
+    These tests validate that build_communities uses graph_name for
+    the GDS projection name.
     """
 
-    def test_gds_projection_with_workspace(self):
-        """build_communities should use workspace-scoped projection name.
-
-        This test validates the expected GDS projection naming convention
-        used by build_communities and does not require a live Neo4j connection.
-        """
-        store = _make_store(workspace_id="ml-research")
-        # The projection name logic in build_communities
-        if store.workspace_id:
-            gds_projection = f"{store.workspace_id}_graph"
-        else:
-            gds_projection = store.graph_name
-        
-        assert gds_projection == "ml-research_graph"
-
-    def test_gds_projection_without_workspace(self):
-        """Without workspace_id, GDS projection should fall back to graph_name.
-
-        This test validates the expected GDS projection naming convention
-        used by build_communities and does not require a live Neo4j connection.
-        """
+    def test_gds_projection_uses_graph_name(self):
+        """build_communities should use graph_name as the projection name."""
         store = _make_store()
-        if store.workspace_id:
-            gds_projection = f"{store.workspace_id}_graph"
-        else:
-            gds_projection = store.graph_name
-        
+        gds_projection = store.graph_name
         assert gds_projection == "neo4j"
-
-    def test_gds_projection_differs_from_db_name(self):
-        """The GDS projection name should differ from the database name when workspace_id is set.
-
-        This test validates the expected GDS projection naming convention
-        used by build_communities and does not require a live Neo4j connection.
-        The source of truth is store.workspace_id, store.graph_name and
-        neo4j_db_name (see build_communities in store.py).
-        """
-        store = _make_store(workspace_id="ml-research")
-        if store.workspace_id:
-            gds_projection = f"{store.workspace_id}_graph"
-        else:
-            gds_projection = store.graph_name
-        
-        # GDS projection is "{workspace_id}_graph", but DB name is "sb_{workspace_id}_{hash}"
-        assert gds_projection == "ml-research_graph"
-        assert store.graph_name == neo4j_db_name("ml-research")
-        assert gds_projection != store.graph_name
 
 
 class TestGraphRAGStoreSummariesDir:
-    """Tests for get_summaries_dir with workspace_id."""
+    """Tests for get_summaries_dir (uses 'default' subdir)."""
 
-    def test_summaries_dir_with_workspace_id(self, tmp_path):
-        """When data_dir and workspace_id are set, summaries dir should be
-        data_dir/{workspace_id}/summaries."""
-        store = _make_store(workspace_id="ml-research", data_dir=str(tmp_path))
-        result = store.get_summaries_dir()
-        expected = tmp_path / "ml-research" / "summaries"
-        assert result == expected
-        assert result.is_dir()
-
-    def test_summaries_dir_without_workspace_id(self, tmp_path):
-        """When workspace_id is None, 'default' should be used as subdir."""
+    def test_summaries_dir_with_data_dir(self, tmp_path):
+        """When data_dir is set, summaries dir should be data_dir/default/summaries."""
         store = _make_store(data_dir=str(tmp_path))
         result = store.get_summaries_dir()
         expected = tmp_path / "default" / "summaries"
@@ -236,11 +150,10 @@ class TestGraphRAGStoreSummariesDir:
         """Without data_dir, should use the data/ directory under project root."""
         store = _make_store()
         result = store.get_summaries_dir()
-        # Should end with data/<workspace_id>/summaries
+        # Should end with data/default/summaries
         assert result.name == "summaries"
         assert result.parent.name == "default"
         # The path should resolve to project_root/data/default/summaries
-        from pathlib import Path
         expected_root = Path(__file__).resolve().parent.parent
         assert result == expected_root / "data" / "default" / "summaries"
 
@@ -251,7 +164,6 @@ class TestGraphRAGStoreSaveLoadSummaries:
     def test_save_and_load_summaries(self, tmp_path):
         """Save and then load summaries — data should round-trip."""
         store = _make_store(
-            workspace_id="test-ws",
             data_dir=str(tmp_path),
             entity_info={"entity1": [1, 2], "entity2": [3]},
             community_summary={"1": "Summary for community 1", "2": "Summary for community 2"},
@@ -261,13 +173,13 @@ class TestGraphRAGStoreSaveLoadSummaries:
         assert version == "test_v1"
 
         # Verify files exist
-        summaries_dir = tmp_path / "test-ws" / "summaries"
+        summaries_dir = tmp_path / "default" / "summaries"
         assert (summaries_dir / "community_summaries_test_v1.json").exists()
         assert (summaries_dir / "entity_info_test_v1.json").exists()
         assert (summaries_dir / "current.json").exists()
 
         # Load in a fresh store
-        store2 = _make_store(workspace_id="test-ws", data_dir=str(tmp_path))
+        store2 = _make_store(data_dir=str(tmp_path))
 
         loaded_summaries, loaded_entities = store2.load_summaries()
         assert loaded_summaries == {"1": "Summary for community 1", "2": "Summary for community 2"}
@@ -278,7 +190,7 @@ class TestGraphRAGStoreSaveLoadSummaries:
 
     def test_save_summaries_auto_version(self, tmp_path):
         """save_summaries without explicit version should generate a timestamp."""
-        store = _make_store(workspace_id="test-ws2", data_dir=str(tmp_path))
+        store = _make_store(data_dir=str(tmp_path))
 
         version = store.save_summaries()
         assert version  # Non-empty
@@ -287,7 +199,7 @@ class TestGraphRAGStoreSaveLoadSummaries:
 
     def test_load_summaries_no_files(self, tmp_path):
         """load_summaries should return empty dicts when no files exist."""
-        store = _make_store(workspace_id="empty-ws", data_dir=str(tmp_path))
+        store = _make_store(data_dir=str(tmp_path))
 
         summaries, entities = store.load_summaries()
         assert summaries == {}
@@ -296,7 +208,6 @@ class TestGraphRAGStoreSaveLoadSummaries:
     def test_current_json_pointer(self, tmp_path):
         """After save, current.json should point to the latest version."""
         store = _make_store(
-            workspace_id="pointer-ws",
             data_dir=str(tmp_path),
             entity_info={"e1": [1]},
             community_summary={"1": "First version"},
@@ -310,7 +221,7 @@ class TestGraphRAGStoreSaveLoadSummaries:
         store.save_summaries(version="v2")
 
         # current.json should point to v2
-        current_path = tmp_path / "pointer-ws" / "summaries" / "current.json"
+        current_path = tmp_path / "default" / "summaries" / "current.json"
         with open(current_path) as f:
             current = json.load(f)
         assert current["version"] == "v2"
@@ -320,7 +231,6 @@ class TestGraphRAGStoreSaveLoadSummaries:
     def test_load_without_current_json(self, tmp_path):
         """load_summaries should find the latest version when current.json is missing."""
         store = _make_store(
-            workspace_id="fallback-ws",
             data_dir=str(tmp_path),
             entity_info={"e1": [1]},
             community_summary={"1": "Only version"},
@@ -329,12 +239,12 @@ class TestGraphRAGStoreSaveLoadSummaries:
         store.save_summaries(version="v3")
 
         # Remove current.json to test fallback
-        current_path = tmp_path / "fallback-ws" / "summaries" / "current.json"
+        current_path = tmp_path / "default" / "summaries" / "current.json"
         assert current_path.exists()
         current_path.unlink()
 
         # Load should still work via file globbing
-        store2 = _make_store(workspace_id="fallback-ws", data_dir=str(tmp_path))
+        store2 = _make_store(data_dir=str(tmp_path))
         summaries, entities = store2.load_summaries()
         assert summaries == {"1": "Only version"}
         assert entities == {"e1": [1]}
@@ -342,12 +252,11 @@ class TestGraphRAGStoreSaveLoadSummaries:
     def test_load_skips_incomplete_version(self, tmp_path):
         """load_summaries should skip versions missing the entity_info file."""
         store = _make_store(
-            workspace_id="incomplete-ws",
             data_dir=str(tmp_path),
             entity_info={"e1": [1]},
             community_summary={"1": "Version with both files"},
         )
-        summaries_dir = tmp_path / "incomplete-ws" / "summaries"
+        summaries_dir = tmp_path / "default" / "summaries"
         store.save_summaries(version="v1")
 
         # Now create a v2 summaries file WITHOUT the matching entity_info file
@@ -362,7 +271,7 @@ class TestGraphRAGStoreSaveLoadSummaries:
         current_path.unlink()
 
         # Should fall back to v1 (which has both files), not v2
-        store2 = _make_store(workspace_id="incomplete-ws", data_dir=str(tmp_path))
+        store2 = _make_store(data_dir=str(tmp_path))
         summaries, entities = store2.load_summaries()
         assert summaries == {"1": "Version with both files"}
         assert entities == {"e1": [1]}
@@ -370,12 +279,11 @@ class TestGraphRAGStoreSaveLoadSummaries:
     def test_load_current_json_points_to_missing_files(self, tmp_path):
         """load_summaries should fall back if current.json points to missing files."""
         store = _make_store(
-            workspace_id="missingfiles-ws",
             data_dir=str(tmp_path),
             entity_info={"e1": [1]},
             community_summary={"1": "Good version"},
         )
-        summaries_dir = tmp_path / "missingfiles-ws" / "summaries"
+        summaries_dir = tmp_path / "default" / "summaries"
         store.save_summaries(version="v_good")
 
         # Rewrite current.json to point to a version that doesn't exist
@@ -384,7 +292,7 @@ class TestGraphRAGStoreSaveLoadSummaries:
         current_path.write_text(json.dumps(current_info))
 
         # Should fall back to v_good (which has both files)
-        store2 = _make_store(workspace_id="missingfiles-ws", data_dir=str(tmp_path))
+        store2 = _make_store(data_dir=str(tmp_path))
         summaries, entities = store2.load_summaries()
         assert summaries == {"1": "Good version"}
         assert entities == {"e1": [1]}

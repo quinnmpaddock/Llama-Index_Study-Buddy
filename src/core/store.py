@@ -1,7 +1,6 @@
-"""GraphRAGStore and GraphRAGQueryEngine — workspace-aware graph storage and querying.
+"""GraphRAGStore and GraphRAGQueryEngine — graph storage and querying.
 
-Extracted from core_classes.py to support multi-workspace Neo4j databases
-and per-workspace community summary persistence.
+Extracted from core_classes.py for community summary persistence.
 """
 
 import asyncio
@@ -24,12 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class GraphRAGStore(Neo4jPropertyGraphStore):
-    """Neo4j-backed property graph store with workspace-aware community detection.
-
-    When *workspace_id* is supplied, the store automatically uses a
-    workspace-scoped Neo4j database name (via ``workspace.neo4j_db_name``) and
-    scopes GDS projection names to avoid collisions between workspaces.
-    """
+    """Neo4j-backed property graph store with community detection."""
 
     def __init__(
         self,
@@ -43,16 +37,9 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         refresh_schema: bool = True,
         create_indexes: bool = True,
         timeout: Optional[float] = None,
-        workspace_id: Optional[str] = None,
         data_dir: Optional[str] = None,
         **kwargs,
     ) -> None:
-        # If workspace_id provided, use it for the database name
-        if workspace_id:
-            from workspace import neo4j_db_name
-
-            database = neo4j_db_name(workspace_id)
-
         super().__init__(
             username=username,
             password=password,
@@ -64,7 +51,6 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
             **kwargs,
         )
 
-        self.workspace_id = workspace_id
         self.data_dir = data_dir
         self.llm = llm or Settings.llm
         self.graph_name = database  # This is the Neo4j database name
@@ -117,11 +103,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
 
     def build_communities(self):
         """Builds communities from the graph and persists them to the neo4j database."""
-        # Use workspace-scoped projection name to avoid collisions
-        if self.workspace_id:
-            gds_projection = f"{self.workspace_id}_graph"
-        else:
-            gds_projection = self.graph_name  # backward compat
+        gds_projection = self.graph_name
 
         try:
             # project the graph to memory
@@ -219,7 +201,7 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
         return self.community_summary
 
     # ------------------------------------------------------------------
-    # Workspace-scoped summary persistence
+    # Summary persistence
     # ------------------------------------------------------------------
 
     # Project root — same convention as services/community.py:
@@ -228,15 +210,15 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
     _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
     def get_summaries_dir(self) -> Path:
-        """Return the directory for this workspace's summaries.
+        """Return the directory for summaries.
 
         When *data_dir* is unset, uses the ``data/`` directory under the
         project root — matching the convention in CommunityService.
         """
         if self.data_dir:
-            d = Path(self.data_dir) / (self.workspace_id or "default") / "summaries"
+            d = Path(self.data_dir) / "default" / "summaries"
         else:
-            d = self._PROJECT_ROOT / "data" / (self.workspace_id or "default") / "summaries"
+            d = self._PROJECT_ROOT / "data" / "default" / "summaries"
         d.mkdir(parents=True, exist_ok=True)
         return d
 
