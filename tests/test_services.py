@@ -340,16 +340,18 @@ class TestPathResolution:
     where both path attempts resolved to wrong directories.
     """
 
-    def test_prompts_dir_resolves_from_services(self):
-        """src/prompts/kg_extract_template.txt must be reachable from services/."""
-        # Same logic as ingestion.py: Path(__file__).resolve().parent.parent
-        from services.ingestion import __file__ as ingestion_file
-        _src_dir = Path(ingestion_file).resolve().parent.parent
-        template_path = _src_dir / "prompts" / "kg_extract_template.txt"
-        assert template_path.exists(), (
-            f"Template not found at {template_path}. "
-            "Path resolution from services/ must reach src/prompts/."
+    def test_prompts_dir_via_registry(self):
+        """PromptRegistry must resolve src/prompts/ from any module depth."""
+        from core.prompts import PromptRegistry
+        reg = PromptRegistry()
+        assert reg.prompts_dir.is_dir(), (
+            f"Prompts directory not found at {reg.prompts_dir}. "
+            "PromptRegistry cannot resolve from core/ module."
         )
+        # Verify kg_extract_template.txt is loadable via the registry
+        content = reg.raw("kg_extract")
+        assert "entities" in content.lower()
+        assert "{text}" in content
 
     def test_project_root_resolves_from_services(self):
         """Project root must be reachable from services/ (3 levels up).

@@ -66,6 +66,9 @@ class GraphRAGConfig:
     def __init__(self, config_dict: dict):
         self.max_paths_per_chunk = config_dict.get("max_paths_per_chunk", 2)
         self.extraction_prompt = config_dict.get("extraction_prompt", "kg_extract_template.txt")
+        self.community_summary_prompt = config_dict.get("community_summary_prompt", "community_summary.txt")
+        self.answer_from_summary_prompt = config_dict.get("answer_from_summary_prompt", "answer_from_summary.txt")
+        self.aggregate_answers_prompt = config_dict.get("aggregate_answers_prompt", "aggregate_answers.txt")
 
 
 class DockerConfig:

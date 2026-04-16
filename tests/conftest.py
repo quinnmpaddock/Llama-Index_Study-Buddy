@@ -47,6 +47,9 @@ server:
 graphrag:
   max_paths_per_chunk: 2
   extraction_prompt: "kg_extract_template.txt"
+  community_summary_prompt: "community_summary.txt"
+  answer_from_summary_prompt: "answer_from_summary.txt"
+  aggregate_answers_prompt: "aggregate_answers.txt"
 docker:
   container_name: "neo4j-test"
 """)

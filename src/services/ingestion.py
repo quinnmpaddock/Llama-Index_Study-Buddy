@@ -207,6 +207,7 @@ class IngestionService:
         from llama_index.embeddings.huggingface import HuggingFaceEmbedding
         from llama_index.llms.openai_like import OpenAILike
 
+        from core.prompts import PromptRegistry
         from core_classes import GraphRAGExtractor, GraphRAGStore
         from ingestion import DocumentIngestion
 
@@ -236,15 +237,8 @@ class IngestionService:
             )
 
             # 2. Load extraction prompt
-            # prompts/ is at src/prompts/ — one directory up from services/
-            _src_dir = Path(__file__).resolve().parent.parent
-            template_path = _src_dir / "prompts" / "kg_extract_template.txt"
-            if not template_path.exists():
-                raise FileNotFoundError(
-                    f"Template file not found at {template_path}. "
-                    f"Ensure src/prompts/kg_extract_template.txt exists."
-                )
-            kg_triplet_extract_tmpl = template_path.read_text(encoding="utf-8")
+            _prompt_reg = PromptRegistry()
+            kg_triplet_extract_tmpl = _prompt_reg.raw("kg_extract")
 
             # 3. Extract nodes from documents
             logger.info(

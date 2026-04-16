@@ -19,7 +19,14 @@ from llama_index.core.llms import LLM, ChatMessage
 from llama_index.core.query_engine import CustomQueryEngine
 from llama_index.graph_stores.neo4j import Neo4jPropertyGraphStore
 
+from core.prompts import PromptRegistry
+
 logger = logging.getLogger(__name__)
+
+# Module-level registry — loaded once, cached for the process lifetime.
+# Individual classes reference this singleton so that prompt loading
+# is centralised and template changes don't require code edits.
+_prompts = PromptRegistry()
 
 
 class GraphRAGStore(Neo4jPropertyGraphStore):
@@ -63,19 +70,9 @@ class GraphRAGStore(Neo4jPropertyGraphStore):
 
     def generate_community_summary(self, text):
         """Generate summary for a given text using an LLM."""
+        prompt = _prompts.get("community_summary")
         messages = [
-            ChatMessage(
-                role="system",
-                content=(
-                    "You are provided with a set of relationships from a knowledge graph, each represented as "
-                    "entity1->entity2->relation->relationship_description. Your task is to create a summary of these "
-                    "relationships. The summary should include the names of the entities involved and a concise synthesis of the relationship descriptions."
-                    "You must cite the source (provided in brackets) for every key fact or group of facts mentioned."
-                    "The goal is to capture the most critical and relevant details that "
-                    "highlight the nature and significance of each relationship. Ensure that the summary is coherent and "
-                    "integrates the information in a way that emphasizes the key aspects of the relationships."
-                ),
-            ),
+            ChatMessage(role="system", content=prompt),
             ChatMessage(role="user", content=text),
         ]
         response = self.llm.chat(messages)
@@ -432,14 +429,13 @@ class GraphRAGQueryEngine(CustomQueryEngine):
 
     def generate_answer_from_summary(self, community_summary, query):
         """Generate an answer from a community summary based on a given query using LLM."""
-        prompt = (
-            f"Given the community summary: {community_summary}, "
-            f"how would you answer the following query? Query: {query}\n\n"
-            f"IMPORTANT: Preserve all source citations [Source: ...] from the summary in your answer. "
-            f"Do not remove or modify any citation markers."
+        system_prompt = _prompts.get(
+            "answer_from_summary",
+            community_summary=community_summary,
+            query=query,
         )
         messages = [
-            ChatMessage(role="system", content=prompt),
+            ChatMessage(role="system", content=system_prompt),
             ChatMessage(
                 role="user",
                 content="I need an answer based on the above information. Keep all source citations intact.",
@@ -451,15 +447,13 @@ class GraphRAGQueryEngine(CustomQueryEngine):
 
     async def agenerate_answer_from_summary(self, community_summary, query):
         """async version of generate_answer_from_summary"""
-
-        prompt = (
-            f"Given the community summary: {community_summary}, "
-            f"how would you answer the following query? Query: {query}\n\n"
-            f"IMPORTANT: Preserve all source citations [Source: ...] from the summary in your answer. "
-            f"Do not remove or modify any citation markers."
+        system_prompt = _prompts.get(
+            "answer_from_summary",
+            community_summary=community_summary,
+            query=query,
         )
         messages = [
-            ChatMessage(role="system", content=prompt),
+            ChatMessage(role="system", content=system_prompt),
             ChatMessage(
                 role="user",
                 content="I need an answer based on the above information. Keep all source citations intact.",
@@ -471,15 +465,9 @@ class GraphRAGQueryEngine(CustomQueryEngine):
 
     def aggregate_answers(self, community_answers):
         """Aggregate individual community answers into a final, coherent response."""
-        prompt = (
-            "Combine the following intermediate answers into a final, concise response. "
-            "IMPORTANT: You MUST preserve every bracketed citation token exactly as it appears "
-            + "(for example `[Source: ...]` and `[test_data0.pdf]`). "
-            + "Every citation token that appears in the intermediate answers must appear in the final output unchanged. "
-            + "Do not remove, rewrite, normalize, or summarize citation markers."
-        )
+        system_prompt = _prompts.get("aggregate_answers")
         messages = [
-            ChatMessage(role="system", content=prompt),
+            ChatMessage(role="system", content=system_prompt),
             ChatMessage(
                 role="user",
                 content=f"Intermediate answers: {community_answers}",
@@ -493,15 +481,9 @@ class GraphRAGQueryEngine(CustomQueryEngine):
 
     async def aaggregate_answers(self, community_answers):
         """Aggregate individual community answers into a final, coherent response."""
-        prompt = (
-            "Combine the following intermediate answers into a final, concise response. "
-            "IMPORTANT: You MUST preserve every bracketed citation token exactly as it appears "
-            + "(for example `[Source: ...]` and `[test_data0.pdf]`). "
-            + "Every citation token that appears in the intermediate answers must appear in the final output unchanged. "
-            + "Do not remove, rewrite, normalize, or summarize citation markers."
-        )
+        system_prompt = _prompts.get("aggregate_answers")
         messages = [
-            ChatMessage(role="system", content=prompt),
+            ChatMessage(role="system", content=system_prompt),
             ChatMessage(
                 role="user",
                 content=f"Intermediate answers: {community_answers}",

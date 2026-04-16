@@ -35,6 +35,9 @@ class TestConfigDefaults:
         cfg = Config(config_path="/tmp/nonexistent_study_buddy.yaml")
         assert cfg.graphrag.max_paths_per_chunk == 2
         assert cfg.graphrag.extraction_prompt == "kg_extract_template.txt"
+        assert cfg.graphrag.community_summary_prompt == "community_summary.txt"
+        assert cfg.graphrag.answer_from_summary_prompt == "answer_from_summary.txt"
+        assert cfg.graphrag.aggregate_answers_prompt == "aggregate_answers.txt"
 
     def test_missing_api_key_raises(self, monkeypatch):
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
