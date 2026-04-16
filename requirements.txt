@@ -175,3 +175,4 @@ wheel==0.46.1
 wrapt==2.1.2
 xlsxwriter==3.2.9
 yarl==1.23.0
+instructor>=1.0.0

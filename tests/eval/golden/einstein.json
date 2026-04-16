@@ -1,0 +1,88 @@
+{
+  "text": "Albert Einstein developed the theory of relativity while working at the Swiss Patent Office in Bern. He published four groundbreaking papers in 1905, his annus mirabilis, covering the photoelectric effect, Brownian motion, special relativity, and mass-energy equivalence (E=mc²). Einstein later joined the Institute for Advanced Study in Princeton after fleeing Nazi Germany in 1933. He received the Nobel Prize in Physics in 1921 for his explanation of the photoelectric effect, not for relativity as commonly assumed.",
+  "entities": [
+    {
+      "entity_name": "Albert Einstein",
+      "entity_type": "Person",
+      "entity_description": "Physicist who developed the theory of relativity and published four groundbreaking papers in 1905."
+    },
+    {
+      "entity_name": "Theory of Relativity",
+      "entity_type": "Concept",
+      "entity_description": "Einstein's theory encompassing special and general relativity."
+    },
+    {
+      "entity_name": "Swiss Patent Office",
+      "entity_type": "Organization",
+      "entity_description": "The patent office in Bern where Einstein worked when he developed relativity."
+    },
+    {
+      "entity_name": "Bern",
+      "entity_type": "Location",
+      "entity_description": "City in Switzerland where Einstein worked at the patent office."
+    },
+    {
+      "entity_name": "Institute for Advanced Study",
+      "entity_type": "Organization",
+      "entity_description": "Research institute in Princeton where Einstein later worked."
+    },
+    {
+      "entity_name": "Princeton",
+      "entity_type": "Location",
+      "entity_description": "City home to the Institute for Advanced Study."
+    },
+    {
+      "entity_name": "Nazi Germany",
+      "entity_type": "Organization",
+      "entity_description": "The regime Einstein fled in 1933."
+    },
+    {
+      "entity_name": "Nobel Prize in Physics",
+      "entity_type": "Award",
+      "entity_description": "Award Einstein received in 1921 for the photoelectric effect."
+    },
+    {
+      "entity_name": "Photoelectric Effect",
+      "entity_type": "Concept",
+      "entity_description": "Phenomenon Einstein explained, for which he won the Nobel Prize."
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity": "Albert Einstein",
+      "target_entity": "Theory of Relativity",
+      "relation": "developed",
+      "relationship_description": "Einstein developed the theory of relativity."
+    },
+    {
+      "source_entity": "Albert Einstein",
+      "target_entity": "Swiss Patent Office",
+      "relation": "worked at",
+      "relationship_description": "Einstein worked at the Swiss Patent Office in Bern when he developed relativity."
+    },
+    {
+      "source_entity": "Albert Einstein",
+      "target_entity": "Institute for Advanced Study",
+      "relation": "joined",
+      "relationship_description": "Einstein joined the Institute for Advanced Study in Princeton after fleeing Nazi Germany."
+    },
+    {
+      "source_entity": "Albert Einstein",
+      "target_entity": "Nobel Prize in Physics",
+      "relation": "received",
+      "relationship_description": "Einstein received the Nobel Prize in Physics in 1921."
+    },
+    {
+      "source_entity": "Albert Einstein",
+      "target_entity": "Photoelectric Effect",
+      "relation": "explained",
+      "relationship_description": "Einstein explained the photoelectric effect, for which he won the Nobel Prize."
+    },
+    {
+      "source_entity": "Albert Einstein",
+      "target_entity": "Nazi Germany",
+      "relation": "fled from",
+      "relationship_description": "Einstein fled Nazi Germany in 1933."
+    }
+  ]
+}

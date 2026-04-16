@@ -207,6 +207,7 @@ class IngestionService:
         from llama_index.embeddings.huggingface import HuggingFaceEmbedding
         from llama_index.llms.openai_like import OpenAILike
 
+        from core.prompts import PromptRegistry
         from core_classes import GraphRAGExtractor, GraphRAGStore
         from ingestion import DocumentIngestion
 
@@ -235,16 +236,18 @@ class IngestionService:
                 is_chat_model=True,
             )
 
-            # 2. Load extraction prompt
-            # prompts/ is at src/prompts/ — one directory up from services/
-            _src_dir = Path(__file__).resolve().parent.parent
-            template_path = _src_dir / "prompts" / "kg_extract_template.txt"
-            if not template_path.exists():
-                raise FileNotFoundError(
-                    f"Template file not found at {template_path}. "
-                    f"Ensure src/prompts/kg_extract_template.txt exists."
-                )
-            kg_triplet_extract_tmpl = template_path.read_text(encoding="utf-8")
+            # 2. Load extraction prompts
+            _prompt_reg = PromptRegistry(config=self.config.graphrag)
+            kg_triplet_extract_tmpl = _prompt_reg.raw("kg_extract")
+
+            # Load two-pass prompts if needed
+            use_two_pass = getattr(self.config.graphrag, "use_two_pass", False)
+            entity_prompt = None
+            relationship_prompt = None
+            if use_two_pass:
+                entity_prompt = _prompt_reg.raw("kg_extract_entities")
+                relationship_prompt = _prompt_reg.raw("kg_extract_relationships")
+                logger.info("Two-pass extraction enabled (entities then relationships)")
 
             # 3. Extract nodes from documents
             logger.info(
@@ -297,11 +300,31 @@ class IngestionService:
 
             # 4. Create knowledge graph extractor
             logger.info("Creating GraphRAG extractor...")
+            use_instructor = getattr(self.config.graphrag, "use_instructor", False)
+            instructor_client = None
+
+            if use_instructor:
+                from core.extractor import create_instructor_client
+                logger.info("Instructor-structured extraction enabled (max_retries=%d)",
+                            self.config.graphrag.instructor_max_retries)
+                instructor_client = create_instructor_client(
+                    api_key=self.config.llm.api_key,
+                    api_base=self.config.llm.api_base,
+                    model=self.config.llm.model,
+                    max_retries=self.config.graphrag.instructor_max_retries,
+                )
+
             kg_extractor = GraphRAGExtractor(
                 llm=llm,
                 extract_prompt=kg_triplet_extract_tmpl,
                 max_paths_per_chunk=2,
                 parse_fn=parse_fn,
+                use_instructor=use_instructor,
+                instructor_client=instructor_client,
+                instructor_model_name=self.config.llm.model,
+                use_two_pass=use_two_pass,
+                entity_prompt=entity_prompt,
+                relationship_prompt=relationship_prompt,
             )
 
             # 5. Connect to Neo4j

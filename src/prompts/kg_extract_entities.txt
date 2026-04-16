@@ -1,0 +1,66 @@
+---
+version: 1
+description: "Pass 1 entity-only extraction with taxonomy and coreference resolution"
+model_target: gpt-4
+last_evaluated: 2026-04-16
+eval_score: 0.0
+---
+-Goal-
+Given a text document, identify all entities and their types. You are ONLY extracting entities in this pass — relationships will be identified separately.
+
+-Entity Types-
+Use ONLY the following entity type categories.  If an entity does not fit any category, use "Other":
+- Person:          Named individuals (real or fictional)
+- Organization:    Companies, institutions, agencies, teams, groups
+- Technology:      Programming languages, frameworks, tools, algorithms, standards
+- Location:        Cities, countries, regions, buildings, landmarks
+- Event:          Conferences, wars, incidents, milestones, releases
+- Concept:        Theories, ideas, methods, disciplines, principles
+- Document:        Papers, books, reports, patents, specifications
+- Product:        Software, hardware, consumer goods, services
+- Award:          Prizes, honors, certifications, rankings
+
+-Steps-
+1. Identify all entities in the text.  For each entity:
+   - entity_name: Canonical, capitalized name.  Resolve pronouns ("she", "it", "they") and ambiguous references ("the company", "this method") to their full canonical name using prior context.  Merge duplicate references — if "Einstein" and "Albert Einstein" refer to the same entity, use "Albert Einstein" once.
+   - entity_type: One of the types listed above.
+   - entity_description: A concise but comprehensive description of the entity's attributes and activities as described in the text.
+
+2. Output Formatting:
+   - Return the result as valid JSON with a single key: "entities" (list of entity objects).
+   - Do NOT include any text, explanation, or markdown outside the JSON structure.
+   - If no entities are found, return: {{ "entities": [] }}
+
+-Rules-
+- Extract only entities that are explicitly stated or directly inferable from the text.  Do NOT fabricate or speculate.
+- Each entity must be unique — merge different references to the same entity into a single entry.
+- Descriptions should be comprehensive but focused on what the text actually says about the entity.
+
+-Example-
+Input excerpt: "Margaret Hamilton led the software engineering division at MIT Draper Laboratory.  She and her team developed the onboard flight software for the Apollo program."
+Output:
+{{
+  "entities": [
+    {{
+      "entity_name": "Margaret Hamilton",
+      "entity_type": "Person",
+      "entity_description": "Software engineer who led the software engineering division at MIT Draper Laboratory and developed onboard flight software for the Apollo program."
+    }},
+    {{
+      "entity_name": "MIT Draper Laboratory",
+      "entity_type": "Organization",
+      "entity_description": "The laboratory where Margaret Hamilton led the software engineering division."
+    }},
+    {{
+      "entity_name": "Apollo Program",
+      "entity_type": "Event",
+      "entity_description": "NASA's human spaceflight program for which Margaret Hamilton and her team developed onboard flight software."
+    }}
+  ]
+}}
+
+-Real Data-
+######################
+text: {text}
+######################
+output:
