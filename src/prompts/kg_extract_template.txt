@@ -1,59 +1,127 @@
 -Goal-
-Given a text document, identify all entities and their entity types from the text and all relationships among the identified entities.
-Given the text, extract up to {max_knowledge_triplets} entity-relation triplets.
+Given a text document, identify all entities and the relationships among them, then return the result as structured JSON.
+
+You may extract up to {max_knowledge_triplets} entity-relationship pairs.
+
+-Entity Types-
+Use ONLY the following entity type categories.  If an entity does not fit any category, use "Other":
+- Person:          Named individuals (real or fictional)
+- Organization:    Companies, institutions, agencies, teams, groups
+- Technology:      Programming languages, frameworks, tools, algorithms, standards
+- Location:        Cities, countries, regions, buildings, landmarks
+- Event:          Conferences, wars, incidents, milestones, releases
+- Concept:        Theories, ideas, methods, disciplines, principles
+- Document:        Papers, books, reports, patents, specifications
+- Product:        Software, hardware, consumer goods, services
+- Award:          Prizes, honors, certifications, rankings
 
 -Steps-
-1. Identify all entities. For each identified entity, extract the following information:
-- entity_name: Name of the entity, capitalized
-- entity_type: Type of the entity
-- entity_description: Comprehensive description of the entity's attributes and activities
+1. Identify all entities in the text.  For each entity:
+   - entity_name: Canonical, capitalized name.  Resolve pronouns ("she", "it", "they") and ambiguous references ("the company", "this method") to their full canonical name using prior context.
+   - entity_type: One of the types listed above.
+   - entity_description: A concise but comprehensive description of the entity's attributes and activities as described in the text.
 
-2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that are *clearly related* to each other.
-For each pair of related entities, extract the following information:
-- source_entity: name of the source entity, as identified in step 1
-- target_entity: name of the target entity, as identified in step 1
-- relation: relationship between source_entity and target_entity
-- relationship_description: explanation as to why you think the source entity and the target entity are related to each other
+2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that have a meaningful relationship.  For each pair:
+   - source_entity: Name exactly as listed in step 1.
+   - target_entity: Name exactly as listed in step 1.
+   - relation: A specific, descriptive verb phrase (e.g. "developed", "acquired", "was CEO of").  Avoid vague relations like "is related to", "is associated with", or "involves".
+   - relationship_description: A brief explanation of why these entities are related, based on the text.
 
 3. Output Formatting:
-- Return the result in valid JSON format with two keys: 'entities' (list of entity objects) and 'relationships' (list of relationship objects).
-- Exclude any text outside the JSON structure (e.g., no explanations or comments).
-- If no entities or relationships are identified, return empty lists: { "entities": [], "relationships": [] }.
+   - Return the result as valid JSON with two keys: "entities" (list of entity objects) and "relationships" (list of relationship objects).
+   - Do NOT include any text, explanation, or markdown outside the JSON structure.
+   - If no entities or relationships are found, return: {{ "entities": [], "relationships": [] }}
 
--An Output Example-
-{
+-Rules-
+- Extract only entities and relationships that are explicitly stated or directly inferable from the text.  Do NOT fabricate or speculate.
+- Merge duplicate entity references: if "Einstein" and "Albert Einstein" refer to the same entity, use "Albert Einstein" once.
+- Prefer specific relations over generic ones: "invented" > "contributed to" > "is related to".
+- Do NOT extract trivially generic relationships (e.g. "Entity A exists" or "Entity B is a concept").
+
+-Example 1: Straightforward Extraction-
+Input excerpt: "Albert Einstein developed the theory of relativity and won the Nobel Prize in Physics in 1921."
+Output:
+{{
   "entities": [
-    {
+    {{
       "entity_name": "Albert Einstein",
       "entity_type": "Person",
-      "entity_description": "Albert Einstein was a theoretical physicist who developed the theory of relativity and made significant contributions to physics."
-    },
-    {
+      "entity_description": "Theoretical physicist who developed the theory of relativity and won the Nobel Prize in Physics in 1921."
+    }},
+    {{
       "entity_name": "Theory of Relativity",
-      "entity_type": "Scientific Theory",
-      "entity_description": "A scientific theory developed by Albert Einstein, describing the laws of physics in relation to observers in different frames of reference."
-    },
-    {
+      "entity_type": "Concept",
+      "entity_description": "A scientific theory describing the laws of physics in relation to observers in different frames of reference, developed by Albert Einstein."
+    }},
+    {{
       "entity_name": "Nobel Prize in Physics",
       "entity_type": "Award",
-      "entity_description": "A prestigious international award in the field of physics, awarded annually by the Royal Swedish Academy of Sciences."
-    }
+      "entity_description": "A prestigious international award in physics, awarded annually by the Royal Swedish Academy of Sciences."
+    }}
   ],
   "relationships": [
-    {
+    {{
       "source_entity": "Albert Einstein",
       "target_entity": "Theory of Relativity",
       "relation": "developed",
       "relationship_description": "Albert Einstein is the developer of the theory of relativity."
-    },
-    {
+    }},
+    {{
       "source_entity": "Albert Einstein",
       "target_entity": "Nobel Prize in Physics",
       "relation": "won",
       "relationship_description": "Albert Einstein won the Nobel Prize in Physics in 1921."
-    }
+    }}
   ]
-}
+}}
+
+-Example 2: Coreference Resolution-
+Input excerpt: "Margaret Hamilton led the software engineering division at MIT Draper Laboratory.  She and her team developed the onboard flight software for the Apollo program.  The software was notable for its error-handling priorities, which NASA credited with saving the Apollo 11 mission."
+Output:
+{{
+  "entities": [
+    {{
+      "entity_name": "Margaret Hamilton",
+      "entity_type": "Person",
+      "entity_description": "Software engineer who led the software engineering division at MIT Draper Laboratory and developed onboard flight software for the Apollo program."
+    }},
+    {{
+      "entity_name": "MIT Draper Laboratory",
+      "entity_type": "Organization",
+      "entity_description": "The laboratory where Margaret Hamilton led the software engineering division."
+    }},
+    {{
+      "entity_name": "Apollo 11",
+      "entity_type": "Event",
+      "entity_description": "The NASA mission whose software, developed by Margaret Hamilton's team, was credited with saving the mission through its error-handling priorities."
+    }},
+    {{
+      "entity_name": "Apollo Program",
+      "entity_type": "Event",
+      "entity_description": "NASA's human spaceflight program for which Margaret Hamilton and her team developed onboard flight software."
+    }}
+  ],
+  "relationships": [
+    {{
+      "source_entity": "Margaret Hamilton",
+      "target_entity": "MIT Draper Laboratory",
+      "relation": "led division at",
+      "relationship_description": "Margaret Hamilton led the software engineering division at MIT Draper Laboratory."
+    }},
+    {{
+      "source_entity": "Margaret Hamilton",
+      "target_entity": "Apollo Program",
+      "relation": "developed software for",
+      "relationship_description": "Margaret Hamilton and her team developed the onboard flight software for the Apollo program."
+    }},
+    {{
+      "source_entity": "Apollo 11",
+      "target_entity": "Apollo Program",
+      "relation": "was part of",
+      "relationship_description": "Apollo 11 was a mission within the Apollo program."
+    }}
+  ]
+}}
 
 -Real Data-
 ######################
