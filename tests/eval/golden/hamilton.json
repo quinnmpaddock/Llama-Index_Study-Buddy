@@ -1,0 +1,67 @@
+{
+  "text": "Margaret Hamilton led the software engineering division at MIT Draper Laboratory. She and her team developed the onboard flight software for the Apollo program. Hamilton coined the term \"software engineering\" while working on the Apollo guidance system. She received the Presidential Medal of Freedom from President Barack Obama in 2016 for her contributions to the field.",
+  "entities": [
+    {
+      "entity_name": "Margaret Hamilton",
+      "entity_type": "Person",
+      "entity_description": "Software engineer who led the software engineering division at MIT Draper Laboratory and developed onboard flight software for the Apollo program."
+    },
+    {
+      "entity_name": "MIT Draper Laboratory",
+      "entity_type": "Organization",
+      "entity_description": "The laboratory where Margaret Hamilton led the software engineering division."
+    },
+    {
+      "entity_name": "Apollo Program",
+      "entity_type": "Event",
+      "entity_description": "NASA's human spaceflight program for which Hamilton developed onboard flight software."
+    },
+    {
+      "entity_name": "Software Engineering",
+      "entity_type": "Concept",
+      "entity_description": "A term coined by Hamilton while working on the Apollo guidance system."
+    },
+    {
+      "entity_name": "Presidential Medal of Freedom",
+      "entity_type": "Award",
+      "entity_description": "Award received by Hamilton from President Obama in 2016."
+    },
+    {
+      "entity_name": "Barack Obama",
+      "entity_type": "Person",
+      "entity_description": "President who awarded Hamilton the Presidential Medal of Freedom in 2016."
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity": "Margaret Hamilton",
+      "target_entity": "MIT Draper Laboratory",
+      "relation": "led division at",
+      "relationship_description": "Margaret Hamilton led the software engineering division at MIT Draper Laboratory."
+    },
+    {
+      "source_entity": "Margaret Hamilton",
+      "target_entity": "Apollo Program",
+      "relation": "developed software for",
+      "relationship_description": "Hamilton and her team developed onboard flight software for the Apollo program."
+    },
+    {
+      "source_entity": "Margaret Hamilton",
+      "target_entity": "Software Engineering",
+      "relation": "coined term",
+      "relationship_description": "Hamilton coined the term \"software engineering\" while working on the Apollo guidance system."
+    },
+    {
+      "source_entity": "Margaret Hamilton",
+      "target_entity": "Presidential Medal of Freedom",
+      "relation": "received",
+      "relationship_description": "Hamilton received the Presidential Medal of Freedom in 2016."
+    },
+    {
+      "source_entity": "Barack Obama",
+      "target_entity": "Presidential Medal of Freedom",
+      "relation": "awarded",
+      "relationship_description": "President Obama awarded Hamilton the Presidential Medal of Freedom in 2016."
+    }
+  ]
+}
