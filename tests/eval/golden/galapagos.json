@@ -1,0 +1,105 @@
+{
+  "text": "The Galápagos Islands, a volcanic archipelago in the Pacific Ocean 600 miles west of Ecuador, played a pivotal role in Charles Darwin's development of natural selection. Darwin visited aboard HMS Beagle in 1835 as the ship's naturalist, observing finches and tortoises that varied from island to island. He later published On the Origin of Species in 1859, which introduced the theory of evolution by natural selection. Alfred Russel Wallace independently conceived the same theory and corresponded with Darwin; their joint paper was read at the Linnean Society of London in 1858. Today, the Charles Darwin Foundation operates a research station on Santa Cruz Island to conserve the islands' unique biodiversity, including the Galápagos giant tortoise and the marine iguana. UNESCO designated the Galápagos as a World Heritage Site in 1978, though invasive species and tourism remain ongoing threats. The government of Ecuador established the Galápagos National Park in 1959 to protect the islands.",
+  "entities": [
+    {
+      "entity_name": "Galápagos Islands",
+      "entity_type": "Location",
+      "entity_description": "A volcanic archipelago in the Pacific Ocean 600 miles west of Ecuador, key to Darwin's development of natural selection."
+    },
+    {
+      "entity_name": "Charles Darwin",
+      "entity_type": "Person",
+      "entity_description": "Naturalist who visited the Galápagos aboard HMS Beagle in 1835 and later published On the Origin of Species."
+    },
+    {
+      "entity_name": "HMS Beagle",
+      "entity_type": "Technology",
+      "entity_description": "The ship aboard which Darwin traveled to the Galápagos Islands in 1835."
+    },
+    {
+      "entity_name": "Natural Selection",
+      "entity_type": "Concept",
+      "entity_description": "The theory that organisms better adapted to their environment tend to survive and produce more offspring."
+    },
+    {
+      "entity_name": "On the Origin of Species",
+      "entity_type": "Document",
+      "entity_description": "Darwin's 1859 book introducing the theory of evolution by natural selection."
+    },
+    {
+      "entity_name": "Alfred Russel Wallace",
+      "entity_type": "Person",
+      "entity_description": "Naturalist who independently conceived the theory of natural selection and co-authored a paper with Darwin."
+    },
+    {
+      "entity_name": "Linnean Society of London",
+      "entity_type": "Organization",
+      "entity_description": "Scientific society where Darwin and Wallace's joint paper on natural selection was read in 1858."
+    },
+    {
+      "entity_name": "Charles Darwin Foundation",
+      "entity_type": "Organization",
+      "entity_description": "Organization that operates a research station on Santa Cruz Island to conserve Galápagos biodiversity."
+    },
+    {
+      "entity_name": "Ecuador",
+      "entity_type": "Location",
+      "entity_description": "South American country that governs the Galápagos Islands and established the Galápagos National Park."
+    },
+    {
+      "entity_name": "UNESCO",
+      "entity_type": "Organization",
+      "entity_description": "International organization that designated the Galápagos as a World Heritage Site in 1978."
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity": "Charles Darwin",
+      "target_entity": "Galápagos Islands",
+      "relation": "visited",
+      "relationship_description": "Darwin visited the Galápagos Islands aboard HMS Beagle in 1835."
+    },
+    {
+      "source_entity": "Charles Darwin",
+      "target_entity": "Natural Selection",
+      "relation": "developed theory of",
+      "relationship_description": "Darwin developed the theory of natural selection based on observations from the Galápagos."
+    },
+    {
+      "source_entity": "Charles Darwin",
+      "target_entity": "On the Origin of Species",
+      "relation": "published",
+      "relationship_description": "Darwin published On the Origin of Species in 1859."
+    },
+    {
+      "source_entity": "Alfred Russel Wallace",
+      "target_entity": "Natural Selection",
+      "relation": "independently conceived",
+      "relationship_description": "Wallace independently conceived the theory of natural selection."
+    },
+    {
+      "source_entity": "Charles Darwin",
+      "target_entity": "Linnean Society of London",
+      "relation": "presented at",
+      "relationship_description": "Darwin and Wallace's joint paper was read at the Linnean Society in 1858."
+    },
+    {
+      "source_entity": "Charles Darwin Foundation",
+      "target_entity": "Galápagos Islands",
+      "relation": "conserves",
+      "relationship_description": "The Charles Darwin Foundation operates a research station to conserve Galápagos biodiversity."
+    },
+    {
+      "source_entity": "UNESCO",
+      "target_entity": "Galápagos Islands",
+      "relation": "designated as heritage site",
+      "relationship_description": "UNESCO designated the Galápagos as a World Heritage Site in 1978."
+    },
+    {
+      "source_entity": "Charles Darwin",
+      "target_entity": "HMS Beagle",
+      "relation": "traveled aboard",
+      "relationship_description": "Darwin traveled to the Galápagos aboard HMS Beagle as the ship's naturalist."
+    }
+  ]
+}

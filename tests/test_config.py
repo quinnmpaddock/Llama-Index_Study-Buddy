@@ -33,7 +33,7 @@ class TestConfigDefaults:
 
     def test_graphrag_defaults(self):
         cfg = Config(config_path="/tmp/nonexistent_study_buddy.yaml")
-        assert cfg.graphrag.max_paths_per_chunk == 2
+        assert cfg.graphrag.max_paths_per_chunk == 15
         assert cfg.graphrag.extraction_prompt == "kg_extract_template.txt"
         assert cfg.graphrag.entity_extraction_prompt == "kg_extract_entities.txt"
         assert cfg.graphrag.relationship_extraction_prompt == "kg_extract_relationships.txt"

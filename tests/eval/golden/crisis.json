@@ -1,0 +1,94 @@
+{
+  "text": "The 2008 financial crisis originated in the United States housing market when subprime mortgage defaults cascaded through the global banking system. Lehman Brothers filed for bankruptcy in September 2008, triggering a stock market crash that wiped out $2 trillion in retirement savings. The Federal Reserve, led by Ben Bernanke, responded with quantitative easing and emergency lending facilities. Congress passed the Troubled Asset Relief Program, which authorized $700 billion to stabilize the financial sector. The crisis spread to Europe, where Greece faced a sovereign debt crisis in 2010 and required bailouts from the European Central Bank and the International Monetary Fund.",
+  "entities": [
+    {
+      "entity_name": "2008 Financial Crisis",
+      "entity_type": "Event",
+      "entity_description": "A global financial crisis originating in the US housing market that caused widespread bank failures and stock market losses."
+    },
+    {
+      "entity_name": "Lehman Brothers",
+      "entity_type": "Organization",
+      "entity_description": "Investment bank that filed for bankruptcy in September 2008, triggering a stock market crash."
+    },
+    {
+      "entity_name": "Federal Reserve",
+      "entity_type": "Organization",
+      "entity_description": "The US central bank that responded to the crisis with quantitative easing and emergency lending."
+    },
+    {
+      "entity_name": "Ben Bernanke",
+      "entity_type": "Person",
+      "entity_description": "Chair of the Federal Reserve during the 2008 financial crisis who oversaw the quantitative easing response."
+    },
+    {
+      "entity_name": "Troubled Asset Relief Program",
+      "entity_type": "Document",
+      "entity_description": "US congressional program that authorized $700 billion to stabilize the financial sector."
+    },
+    {
+      "entity_name": "Greece",
+      "entity_type": "Location",
+      "entity_description": "European country that faced a sovereign debt crisis in 2010 following the financial contagion."
+    },
+    {
+      "entity_name": "European Central Bank",
+      "entity_type": "Organization",
+      "entity_description": "Central bank for the eurozone that provided bailout funds to Greece."
+    },
+    {
+      "entity_name": "International Monetary Fund",
+      "entity_type": "Organization",
+      "entity_description": "International financial institution that co-provided bailout funds to Greece during its debt crisis."
+    },
+    {
+      "entity_name": "Subprime Mortgage",
+      "entity_type": "Concept",
+      "entity_description": "High-risk mortgage loans whose defaults cascaded through the banking system, triggering the crisis."
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity": "2008 Financial Crisis",
+      "target_entity": "Lehman Brothers",
+      "relation": "caused bankruptcy of",
+      "relationship_description": "The financial crisis caused Lehman Brothers to file for bankruptcy."
+    },
+    {
+      "source_entity": "Ben Bernanke",
+      "target_entity": "Federal Reserve",
+      "relation": "led",
+      "relationship_description": "Ben Bernanke chaired the Federal Reserve during the crisis."
+    },
+    {
+      "source_entity": "Federal Reserve",
+      "target_entity": "2008 Financial Crisis",
+      "relation": "responded to",
+      "relationship_description": "The Federal Reserve responded to the crisis with quantitative easing and emergency lending."
+    },
+    {
+      "source_entity": "Troubled Asset Relief Program",
+      "target_entity": "2008 Financial Crisis",
+      "relation": "stabilized",
+      "relationship_description": "TARP was passed by Congress to stabilize the financial sector during the crisis."
+    },
+    {
+      "source_entity": "Greece",
+      "target_entity": "European Central Bank",
+      "relation": "received bailout from",
+      "relationship_description": "Greece received bailout funds from the European Central Bank during its sovereign debt crisis."
+    },
+    {
+      "source_entity": "Greece",
+      "target_entity": "International Monetary Fund",
+      "relation": "received bailout from",
+      "relationship_description": "Greece received bailout funds from the IMF during its sovereign debt crisis."
+    },
+    {
+      "source_entity": "Subprime Mortgage",
+      "target_entity": "2008 Financial Crisis",
+      "relation": "triggered",
+      "relationship_description": "Defaults on subprime mortgages cascaded through the banking system and triggered the financial crisis."
+    }
+  ]
+}

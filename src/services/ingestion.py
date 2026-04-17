@@ -34,11 +34,25 @@ SUPPORTED_EXTENSIONS = {
 def extract_json(text: str):
     """Extract and parse JSON from LLM output text.
 
-    First tries a fast regex match, then falls back to progressively
-    shrinking the substring from the end until valid JSON is found.
+    First normalizes double braces from PromptTemplate escape sequences,
+    then tries regex match, then falls back to progressive substring
+    shrinking. Also handles markdown code fences.
 
     Returns parsed dict on success, ``None`` on failure.
     """
+    # Normalize double braces that LLMs may echo from prompt templates
+    # using {{ }} to escape literal braces. LlamaIndex PromptTemplate
+    # does NOT convert {{ }} to { }, so the LLM echoes them back.
+    text = text.replace("{{", "{").replace("}}", "}")
+
+    # Try markdown code fence extraction first (e.g. ```json ... ```)
+    block = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+    if block:
+        try:
+            return json.loads(block.group(1).strip())
+        except json.JSONDecodeError:
+            pass  # Fall through to regex path
+
     # Fast path: try regex match first
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:

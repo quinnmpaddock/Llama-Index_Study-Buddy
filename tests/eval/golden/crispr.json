@@ -1,0 +1,121 @@
+{
+  "text": "CRISPR-Cas9 was adapted for gene editing by Jennifer Doudna at UC Berkeley and Emmanuelle Charpentier at Umeå University, work that earned them the 2020 Nobel Prize in Chemistry. The Broad Institute of MIT and Harvard, led by Feng Zhang, also developed CRISPR editing tools and secured key patents, leading to a protracted patent dispute between Berkeley and Broad. Editas Medicine, a company co-founded by Zhang, applied CRISPR to treating genetic disorders including sickle cell disease. In 2023, the FDA approved Casgevy, a CRISPR-based therapy developed by Vertex Pharmaceuticals and CRISPR Therapeutics, making it the first approved gene-editing treatment. The European Medicines Agency followed with its own approval in 2024. Ethicists continue to debate germline editing after He Jiankui was sentenced to prison in China for creating CRISPR-edited babies in 2018.",
+  "entities": [
+    {
+      "entity_name": "CRISPR-Cas9",
+      "entity_type": "Technology",
+      "entity_description": "Gene editing tool adapted for precise DNA modification, sparking both therapeutic breakthroughs and ethical debates."
+    },
+    {
+      "entity_name": "Jennifer Doudna",
+      "entity_type": "Person",
+      "entity_description": "Biochemist at UC Berkeley who co-adapted CRISPR-Cas9 for gene editing and won the 2020 Nobel Prize in Chemistry."
+    },
+    {
+      "entity_name": "Emmanuelle Charpentier",
+      "entity_type": "Person",
+      "entity_description": "Microbiologist at Umeå University who co-developed CRISPR-Cas9 gene editing and shared the 2020 Nobel Prize."
+    },
+    {
+      "entity_name": "UC Berkeley",
+      "entity_type": "Organization",
+      "entity_description": "University where Jennifer Doudna conducted CRISPR-Cas9 gene editing research."
+    },
+    {
+      "entity_name": "Umeå University",
+      "entity_type": "Organization",
+      "entity_description": "Swedish university where Emmanuelle Charpentier co-developed CRISPR-Cas9."
+    },
+    {
+      "entity_name": "Broad Institute",
+      "entity_type": "Organization",
+      "entity_description": "Research institute affiliated with MIT and Harvard that developed competing CRISPR tools and holds key patents."
+    },
+    {
+      "entity_name": "Feng Zhang",
+      "entity_type": "Person",
+      "entity_description": "Researcher at the Broad Institute who developed CRISPR editing tools and co-founded Editas Medicine."
+    },
+    {
+      "entity_name": "Editas Medicine",
+      "entity_type": "Organization",
+      "entity_description": "Biotech company co-founded by Feng Zhang that applies CRISPR to treating genetic disorders."
+    },
+    {
+      "entity_name": "Casgevy",
+      "entity_type": "Product",
+      "entity_description": "First FDA-approved CRISPR-based gene therapy, developed by Vertex Pharmaceuticals and CRISPR Therapeutics for sickle cell disease."
+    },
+    {
+      "entity_name": "FDA",
+      "entity_type": "Organization",
+      "entity_description": "US regulatory agency that approved Casgevy in 2023 as the first gene-editing treatment."
+    },
+    {
+      "entity_name": "He Jiankui",
+      "entity_type": "Person",
+      "entity_description": "Chinese scientist sentenced to prison for creating CRISPR-edited babies in 2018, sparking ethical debate."
+    },
+    {
+      "entity_name": "Nobel Prize in Chemistry",
+      "entity_type": "Award",
+      "entity_description": "Awarded to Doudna and Charpentier in 2020 for developing CRISPR-Cas9 gene editing."
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity": "Jennifer Doudna",
+      "target_entity": "CRISPR-Cas9",
+      "relation": "co-developed",
+      "relationship_description": "Jennifer Doudna co-adapted CRISPR-Cas9 for gene editing."
+    },
+    {
+      "source_entity": "Emmanuelle Charpentier",
+      "target_entity": "CRISPR-Cas9",
+      "relation": "co-developed",
+      "relationship_description": "Emmanuelle Charpentier co-developed CRISPR-Cas9 for gene editing."
+    },
+    {
+      "source_entity": "Jennifer Doudna",
+      "target_entity": "UC Berkeley",
+      "relation": "conducted research at",
+      "relationship_description": "Doudna conducted her CRISPR research at UC Berkeley."
+    },
+    {
+      "source_entity": "Feng Zhang",
+      "target_entity": "Broad Institute",
+      "relation": "led research at",
+      "relationship_description": "Feng Zhang led CRISPR tool development at the Broad Institute."
+    },
+    {
+      "source_entity": "Feng Zhang",
+      "target_entity": "Editas Medicine",
+      "relation": "co-founded",
+      "relationship_description": "Feng Zhang co-founded Editas Medicine to apply CRISPR to genetic disorders."
+    },
+    {
+      "source_entity": "FDA",
+      "target_entity": "Casgevy",
+      "relation": "approved",
+      "relationship_description": "The FDA approved Casgevy in 2023 as the first CRISPR-based gene therapy."
+    },
+    {
+      "source_entity": "He Jiankui",
+      "target_entity": "CRISPR-Cas9",
+      "relation": "misused",
+      "relationship_description": "He Jiankui created CRISPR-edited babies in 2018, leading to his imprisonment and ethical debate."
+    },
+    {
+      "source_entity": "Jennifer Doudna",
+      "target_entity": "Nobel Prize in Chemistry",
+      "relation": "received",
+      "relationship_description": "Doudna received the 2020 Nobel Prize in Chemistry for CRISPR-Cas9."
+    },
+    {
+      "source_entity": "Emmanuelle Charpentier",
+      "target_entity": "Nobel Prize in Chemistry",
+      "relation": "received",
+      "relationship_description": "Charpentier shared the 2020 Nobel Prize in Chemistry with Doudna."
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "mode": "single-pass",
+  "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+  "api_base": "https://api.groq.com/openai/v1",
+  "timestamp": "2026-04-16T19:00:45",
+  "elapsed_seconds": 7.5,
+  "num_cases": 2,
+  "aggregate": {
+    "entity_precision": 0.0,
+    "entity_recall": 0.0,
+    "entity_f1": 0.0,
+    "relationship_precision": 0.0,
+    "relationship_recall": 0.0,
+    "relationship_f1": 0.0
+  },
+  "cases": [
+    {
+      "golden_key": "einstein",
+      "entity_precision": 0.0,
+      "entity_recall": 0.0,
+      "entity_f1": 0.0,
+      "entity_matched": 0,
+      "entity_golden": 9,
+      "entity_predicted": 0,
+      "relationship_precision": 0.0,
+      "relationship_recall": 0.0,
+      "relationship_f1": 0.0,
+      "relationship_matched": 0,
+      "relationship_golden": 6,
+      "relationship_predicted": 0
+    },
+    {
+      "golden_key": "hamilton",
+      "entity_precision": 0.0,
+      "entity_recall": 0.0,
+      "entity_f1": 0.0,
+      "entity_matched": 0,
+      "entity_golden": 6,
+      "entity_predicted": 0,
+      "relationship_precision": 0.0,
+      "relationship_recall": 0.0,
+      "relationship_f1": 0.0,
+      "relationship_matched": 0,
+      "relationship_golden": 5,
+      "relationship_predicted": 0
+    }
+  ]
+}

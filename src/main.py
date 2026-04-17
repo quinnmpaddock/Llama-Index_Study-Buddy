@@ -53,11 +53,45 @@ template_prompt = os.path.join(BASE_DIR, template_loc, template_fileName)
 
 
 def parse_fn(response_str: str):
-    print(f"DEBUG: LLM Response: {response_str}")
-    json_pattern = r"\{.*\}"
-    match = re.search(json_pattern, response_str, re.DOTALL)
+    """Parse LLM response for entity/relationship extraction.
+
+    Handles double-brace normalization and markdown code fences
+    before attempting JSON parsing.
+    """
+    # Normalize double braces from PromptTemplate escape sequences
+    response_str = response_str.replace("{{", "{").replace("}}", "}")
+
+    # Try markdown code fence extraction first
     entities = []
     relationships = []
+    block = re.search(r"```(?:json)?\s*(.*?)```", response_str, re.DOTALL)
+    if block:
+        try:
+            data = json.loads(block.group(1).strip())
+            entities = [
+                (
+                    entity["entity_name"],
+                    entity["entity_type"],
+                    entity["entity_description"],
+                )
+                for entity in data.get("entities", [])
+            ]
+            relationships = [
+                (
+                    relation["source_entity"],
+                    relation["target_entity"],
+                    relation["relation"],
+                    relation["relationship_description"],
+                )
+                for relation in data.get("relationships", [])
+            ]
+            return entities, relationships
+        except (json.JSONDecodeError, KeyError):
+            pass  # Fall through to regex path
+
+    # Fallback: regex match
+    json_pattern = r"\{.*\}"
+    match = re.search(json_pattern, response_str, re.DOTALL)
     if not match:
         return entities, relationships
     json_str = match.group(0)
@@ -99,7 +133,7 @@ def main():
         kg_extractor = GraphRAGExtractor(
             llm=llm,
             extract_prompt=KG_TRIPLET_EXTRACT_TMPL,
-            max_paths_per_chunk=2,
+            max_paths_per_chunk=config.graphrag.max_paths_per_chunk,
             parse_fn=parse_fn,
         )
 

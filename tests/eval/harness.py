@@ -55,6 +55,18 @@ def normalise(text: str) -> str:
     return text
 
 
+def _stem_verb(relation: str) -> str:
+    """Normalise a relation verb for fuzzy matching.
+
+    Takes the first word of the relation to match on the core verb:
+    "developed theory of" → "developed"
+    "manufactures battery cells at" → "manufactures"
+    "co-developed" → "co-developed"
+    """
+    relation = normalise(relation)
+    return relation.split()[0] if relation else relation
+
+
 def entity_match_key(name: str, entity_type: str) -> str:
     """Create a match key for entity comparison.
 
@@ -62,6 +74,11 @@ def entity_match_key(name: str, entity_type: str) -> str:
     matches "margaret hamilton" / "person".
     """
     return f"{normalise(name)}::{normalise(entity_type)}"
+
+
+def entity_name_key(name: str) -> str:
+    """Create a name-only match key for entity comparison (ignoring type)."""
+    return normalise(name)
 
 
 def relationship_match_key(
@@ -73,6 +90,23 @@ def relationship_match_key(
     but whitespace/casing differences are tolerated.
     """
     return f"{normalise(source)}→{normalise(target)}:{normalise(relation)}"
+
+
+def relationship_fuzzy_key(
+    source: str, target: str, relation: str
+) -> str:
+    """Create a fuzzy match key for relationship comparison.
+
+    Uses stemmed verb (first word only) and allows either direction:
+    ``A→B:developed`` matches ``B→A:developed``.
+    """
+    src = normalise(source)
+    tgt = normalise(target)
+    verb = _stem_verb(relation)
+    # Normalise direction: always put alphabetically smaller name first
+    if src > tgt:
+        src, tgt = tgt, src
+    return f"{src}↔{tgt}:{verb}"
 
 
 # ---------------------------------------------------------------------------
@@ -100,10 +134,21 @@ class MetricResult:
 
 @dataclass
 class EvaluationResult:
-    """Full evaluation result for a single golden case."""
+    """Full evaluation result for a single golden case.
+
+    Provides three-tier scoring:
+    - ``entity_metrics``: strict match on (name, type)
+    - ``entity_name_metrics``: match on name only (ignoring type)
+    - ``relationship_metrics``: strict match on (source, target, relation)
+    - ``rel_fuzzy_metrics``: fuzzy match (stemmed verb, bidirectional)
+    """
     golden_key: str
     entity_metrics: MetricResult
     relationship_metrics: MetricResult
+    # Two-tier: name-only matching (ignoring entity type)
+    entity_name_metrics: Optional[MetricResult] = None
+    # Fuzzy relationship matching (stemmed verb, bidirectional)
+    rel_fuzzy_metrics: Optional[MetricResult] = None
     entity_false_positives: List[str] = field(default_factory=list)
     entity_false_negatives: List[str] = field(default_factory=list)
     relationship_false_positives: List[str] = field(default_factory=list)
@@ -113,8 +158,16 @@ class EvaluationResult:
         lines = [
             f"=== Evaluation: {self.golden_key} ===",
             self.entity_metrics.summary(),
-            self.relationship_metrics.summary(),
         ]
+        if self.entity_name_metrics:
+            lines.append(f"  (name-only: P={self.entity_name_metrics.precision:.2%} "
+                         f"R={self.entity_name_metrics.recall:.2%} "
+                         f"F1={self.entity_name_metrics.f1:.2%})")
+        lines.append(self.relationship_metrics.summary())
+        if self.rel_fuzzy_metrics:
+            lines.append(f"  (rel-fuzzy: P={self.rel_fuzzy_metrics.precision:.2%} "
+                         f"R={self.rel_fuzzy_metrics.recall:.2%} "
+                         f"F1={self.rel_fuzzy_metrics.f1:.2%})")
         if self.entity_false_positives:
             lines.append(f"  Entity FP: {self.entity_false_positives[:5]}")
         if self.entity_false_negatives:
@@ -128,7 +181,14 @@ class EvaluationResult:
 
 @dataclass
 class AggregateResult:
-    """Aggregate metrics across multiple golden cases."""
+    """Aggregate metrics across multiple golden cases.
+
+    Provides two-tier scoring:
+    - entity_*: strict match on (name, type)
+    - entity_name_*: match on name only (ignoring type)
+    - relationship_*: strict match on (source, target, relation)
+    - rel_fuzzy_*: fuzzy match (stemmed verb, bidirectional)
+    """
     num_cases: int
     entity_precision: float
     entity_recall: float
@@ -136,15 +196,28 @@ class AggregateResult:
     relationship_precision: float
     relationship_recall: float
     relationship_f1: float
+    # Two-tier: name-only matching
+    entity_name_precision: float = 0.0
+    entity_name_recall: float = 0.0
+    entity_name_f1: float = 0.0
+    # Fuzzy relationship matching
+    rel_fuzzy_precision: float = 0.0
+    rel_fuzzy_recall: float = 0.0
+    rel_fuzzy_f1: float = 0.0
 
     def summary(self) -> str:
-        return (
-            f"=== Aggregate ({self.num_cases} cases) ===\n"
-            f"  Entities: P={self.entity_precision:.2%} "
-            f"R={self.entity_recall:.2%} F1={self.entity_f1:.2%}\n"
-            f"  Rels:     P={self.relationship_precision:.2%} "
-            f"R={self.relationship_recall:.2%} F1={self.relationship_f1:.2%}"
-        )
+        lines = [
+            f"=== Aggregate ({self.num_cases} cases) ===",
+            f"  Entities (name+type): P={self.entity_precision:.2%} "
+            f"R={self.entity_recall:.2%} F1={self.entity_f1:.2%}",
+            f"  Entities (name-only):  P={self.entity_name_precision:.2%} "
+            f"R={self.entity_name_recall:.2%} F1={self.entity_name_f1:.2%}",
+            f"  Rels (strict):         P={self.relationship_precision:.2%} "
+            f"R={self.relationship_recall:.2%} F1={self.relationship_f1:.2%}",
+            f"  Rels (fuzzy):          P={self.rel_fuzzy_precision:.2%} "
+            f"R={self.rel_fuzzy_recall:.2%} F1={self.rel_fuzzy_f1:.2%}",
+        ]
+        return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -293,6 +366,19 @@ class EvaluationHarness:
             golden_entity_raw,
         )
 
+        # Two-tier: name-only matching (ignoring entity type)
+        predicted_name_keys = {normalise(name) for name, _, _ in predicted_entities}
+        golden_name_keys = {normalise(name) for name, _, _ in golden.entities}
+        predicted_name_raw = [normalise(name) for name, _, _ in predicted_entities]
+        golden_name_raw = [normalise(name) for name, _, _ in golden.entities]
+        e_name_metrics, _, _ = _compute_metrics(
+            predicted_name_keys,
+            golden_name_keys,
+            "entities_name_only",
+            predicted_name_raw,
+            golden_name_raw,
+        )
+
         # Relationship matching: compare on (normalised_source, normalised_target, normalised_relation)
         predicted_rel_keys = {
             relationship_match_key(src, tgt, rel)
@@ -319,10 +405,38 @@ class EvaluationHarness:
             golden_rel_raw,
         )
 
+        # Fuzzy relationship matching: stemmed verb + bidirectional
+        predicted_fuzzy_keys = {
+            relationship_fuzzy_key(src, tgt, rel)
+            for src, tgt, rel, _ in predicted_relationships
+        }
+        golden_fuzzy_keys = {
+            relationship_fuzzy_key(src, tgt, rel)
+            for src, tgt, rel, _ in golden.relationships
+        }
+        predicted_fuzzy_raw = [
+            relationship_fuzzy_key(src, tgt, rel)
+            for src, tgt, rel, _ in predicted_relationships
+        ]
+        golden_fuzzy_raw = [
+            relationship_fuzzy_key(src, tgt, rel)
+            for src, tgt, rel, _ in golden.relationships
+        ]
+
+        r_fuzzy_metrics, _, _ = _compute_metrics(
+            predicted_fuzzy_keys,
+            golden_fuzzy_keys,
+            "relationships_fuzzy",
+            predicted_fuzzy_raw,
+            golden_fuzzy_raw,
+        )
+
         return EvaluationResult(
             golden_key=golden_key,
             entity_metrics=e_metrics,
+            entity_name_metrics=e_name_metrics,
             relationship_metrics=r_metrics,
+            rel_fuzzy_metrics=r_fuzzy_metrics,
             entity_false_positives=e_fp,
             entity_false_negatives=e_fn,
             relationship_false_positives=r_fp,
@@ -366,16 +480,28 @@ class EvaluationHarness:
         avg_ep = sum(r.entity_metrics.precision for r in results) / n
         avg_er = sum(r.entity_metrics.recall for r in results) / n
         avg_ef = sum(r.entity_metrics.f1 for r in results) / n
+        avg_enp = sum(r.entity_name_metrics.precision for r in results if r.entity_name_metrics) / n
+        avg_enr = sum(r.entity_name_metrics.recall for r in results if r.entity_name_metrics) / n
+        avg_enf = sum(r.entity_name_metrics.f1 for r in results if r.entity_name_metrics) / n
         avg_rp = sum(r.relationship_metrics.precision for r in results) / n
         avg_rr = sum(r.relationship_metrics.recall for r in results) / n
         avg_rf = sum(r.relationship_metrics.f1 for r in results) / n
+        avg_rfp = sum(r.rel_fuzzy_metrics.precision for r in results if r.rel_fuzzy_metrics) / n
+        avg_rfr = sum(r.rel_fuzzy_metrics.recall for r in results if r.rel_fuzzy_metrics) / n
+        avg_rff = sum(r.rel_fuzzy_metrics.f1 for r in results if r.rel_fuzzy_metrics) / n
 
         return AggregateResult(
             num_cases=n,
             entity_precision=avg_ep,
             entity_recall=avg_er,
             entity_f1=avg_ef,
+            entity_name_precision=avg_enp,
+            entity_name_recall=avg_enr,
+            entity_name_f1=avg_enf,
             relationship_precision=avg_rp,
             relationship_recall=avg_rr,
             relationship_f1=avg_rf,
+            rel_fuzzy_precision=avg_rfp,
+            rel_fuzzy_recall=avg_rfr,
+            rel_fuzzy_f1=avg_rff,
         )

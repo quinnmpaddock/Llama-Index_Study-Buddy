@@ -1,0 +1,94 @@
+{
+  "text": "Tesla's Gigafactory Nevada, located outside Reno, is the world's largest lithium-ion battery plant. Panasonic manufactures battery cells at the facility under a joint venture agreement signed in 2014. The factory produces battery packs for the Tesla Model 3 and Tesla Model Y, both of which are assembled at Tesla's Fremont factory in California. Tesla's Autopilot system, a Level 2 driver-assistance feature, uses neural networks trained on data collected from the fleet. Mobileye, an Intel subsidiary, previously supplied the vision processing chips before Tesla developed its own Full Self-Driving computer. The National Highway Traffic Safety Administration has investigated multiple crashes involving Autopilot, issuing recalls in 2023 and 2024.",
+  "entities": [
+    {
+      "entity_name": "Gigafactory Nevada",
+      "entity_type": "Product",
+      "entity_description": "Tesla's lithium-ion battery factory outside Reno, the world's largest, producing battery packs for Tesla vehicles."
+    },
+    {
+      "entity_name": "Panasonic",
+      "entity_type": "Organization",
+      "entity_description": "Electronics company that manufactures battery cells at Gigafactory Nevada under a joint venture."
+    },
+    {
+      "entity_name": "Tesla Model 3",
+      "entity_type": "Product",
+      "entity_description": "Electric vehicle manufactured by Tesla that uses battery packs from Gigafactory Nevada."
+    },
+    {
+      "entity_name": "Tesla Model Y",
+      "entity_type": "Product",
+      "entity_description": "Electric SUV manufactured by Tesla that uses battery packs from Gigafactory Nevada."
+    },
+    {
+      "entity_name": "Fremont Factory",
+      "entity_type": "Location",
+      "entity_description": "Tesla's vehicle assembly plant in California where the Model 3 and Model Y are produced."
+    },
+    {
+      "entity_name": "Autopilot",
+      "entity_type": "Technology",
+      "entity_description": "Tesla's Level 2 driver-assistance system using neural networks trained on fleet data."
+    },
+    {
+      "entity_name": "Mobileye",
+      "entity_type": "Organization",
+      "entity_description": "Intel subsidiary that formerly supplied vision processing chips for Tesla's Autopilot."
+    },
+    {
+      "entity_name": "Intel",
+      "entity_type": "Organization",
+      "entity_description": "Semiconductor company and parent of Mobileye."
+    },
+    {
+      "entity_name": "National Highway Traffic Safety Administration",
+      "entity_type": "Organization",
+      "entity_description": "US federal agency that investigated Autopilot-related crashes and issued recalls."
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity": "Panasonic",
+      "target_entity": "Gigafactory Nevada",
+      "relation": "manufactures cells at",
+      "relationship_description": "Panasonic manufactures battery cells at Gigafactory Nevada under a joint venture agreement."
+    },
+    {
+      "source_entity": "Gigafactory Nevada",
+      "target_entity": "Tesla Model 3",
+      "relation": "produces batteries for",
+      "relationship_description": "Gigafactory Nevada produces battery packs for the Tesla Model 3."
+    },
+    {
+      "source_entity": "Gigafactory Nevada",
+      "target_entity": "Tesla Model Y",
+      "relation": "produces batteries for",
+      "relationship_description": "Gigafactory Nevada produces battery packs for the Tesla Model Y."
+    },
+    {
+      "source_entity": "Fremont Factory",
+      "target_entity": "Tesla Model 3",
+      "relation": "assembles",
+      "relationship_description": "The Fremont factory assembles the Tesla Model 3."
+    },
+    {
+      "source_entity": "Mobileye",
+      "target_entity": "Autopilot",
+      "relation": "formerly supplied chips for",
+      "relationship_description": "Mobileye supplied vision processing chips for Autopilot before Tesla developed its own hardware."
+    },
+    {
+      "source_entity": "Intel",
+      "target_entity": "Mobileye",
+      "relation": "owns",
+      "relationship_description": "Intel is the parent company of Mobileye."
+    },
+    {
+      "source_entity": "National Highway Traffic Safety Administration",
+      "target_entity": "Autopilot",
+      "relation": "investigated",
+      "relationship_description": "NHTSA investigated multiple crashes involving Autopilot and issued recalls in 2023 and 2024."
+    }
+  ]
+}

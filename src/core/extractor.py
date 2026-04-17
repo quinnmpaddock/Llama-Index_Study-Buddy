@@ -331,10 +331,16 @@ class GraphRAGExtractor(TransformComponent):
                 raise
 
             try:
-                # Parse entities-only JSON: {"entities": [...]}
-                data = json.loads(
-                    __import__("re").search(r"\{.*\}", llm_response, __import__("re").DOTALL).group(0)
+                # Normalize double braces and strip markdown code fences
+                raw = llm_response.replace("{{", "{").replace("}}", "}")
+                fence_match = __import__("re").search(
+                    r"```(?:json)?\s*(.*?)```", raw, __import__("re").DOTALL
                 )
+                json_str = (
+                    fence_match.group(1).strip() if fence_match
+                    else __import__("re").search(r"\{.*\}", raw, __import__("re").DOTALL).group(0)
+                )
+                data = json.loads(json_str)
                 entity_tuples = [
                     (e["entity_name"], e["entity_type"], e["entity_description"])
                     for e in data.get("entities", [])
@@ -380,9 +386,16 @@ class GraphRAGExtractor(TransformComponent):
                 raise
 
             try:
-                data = json.loads(
-                    __import__("re").search(r"\{.*\}", llm_response, __import__("re").DOTALL).group(0)
+                # Normalize double braces and strip markdown code fences
+                raw = llm_response.replace("{{", "{").replace("}}", "}")
+                fence_match = __import__("re").search(
+                    r"```(?:json)?\s*(.*?)```", raw, __import__("re").DOTALL
                 )
+                json_str = (
+                    fence_match.group(1).strip() if fence_match
+                    else __import__("re").search(r"\{.*\}", raw, __import__("re").DOTALL).group(0)
+                )
+                data = json.loads(json_str)
                 relationship_tuples = [
                     (
                         r["source_entity"],

@@ -64,7 +64,7 @@ class ServerConfig:
 class GraphRAGConfig:
     """Knowledge graph settings."""
     def __init__(self, config_dict: dict):
-        self.max_paths_per_chunk = config_dict.get("max_paths_per_chunk", 2)
+        self.max_paths_per_chunk = config_dict.get("max_paths_per_chunk", 15)
         self.extraction_prompt = config_dict.get("extraction_prompt", "kg_extract_template.txt")
         self.entity_extraction_prompt = config_dict.get("entity_extraction_prompt", "kg_extract_entities.txt")
         self.relationship_extraction_prompt = config_dict.get("relationship_extraction_prompt", "kg_extract_relationships.txt")

@@ -1,5 +1,5 @@
 ---
-version: 1
+version: 2
 description: "Pass 1 entity-only extraction with taxonomy and coreference resolution"
 model_target: gpt-4
 last_evaluated: 2026-04-16
@@ -29,7 +29,7 @@ Use ONLY the following entity type categories.  If an entity does not fit any ca
 2. Output Formatting:
    - Return the result as valid JSON with a single key: "entities" (list of entity objects).
    - Do NOT include any text, explanation, or markdown outside the JSON structure.
-   - If no entities are found, return: {{ "entities": [] }}
+   - If no entities are found, return: { "entities": [] }
 
 -Rules-
 - Extract only entities that are explicitly stated or directly inferable from the text.  Do NOT fabricate or speculate.
@@ -39,25 +39,25 @@ Use ONLY the following entity type categories.  If an entity does not fit any ca
 -Example-
 Input excerpt: "Margaret Hamilton led the software engineering division at MIT Draper Laboratory.  She and her team developed the onboard flight software for the Apollo program."
 Output:
-{{
+{
   "entities": [
-    {{
+    {
       "entity_name": "Margaret Hamilton",
       "entity_type": "Person",
       "entity_description": "Software engineer who led the software engineering division at MIT Draper Laboratory and developed onboard flight software for the Apollo program."
-    }},
-    {{
+    },
+    {
       "entity_name": "MIT Draper Laboratory",
       "entity_type": "Organization",
       "entity_description": "The laboratory where Margaret Hamilton led the software engineering division."
-    }},
-    {{
+    },
+    {
       "entity_name": "Apollo Program",
       "entity_type": "Event",
       "entity_description": "NASA's human spaceflight program for which Margaret Hamilton and her team developed onboard flight software."
-    }}
+    }
   ]
-}}
+}
 
 -Real Data-
 ######################

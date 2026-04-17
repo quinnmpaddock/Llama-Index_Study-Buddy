@@ -1,0 +1,48 @@
+{
+  "mode": "single-pass",
+  "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+  "api_base": "https://api.groq.com/openai/v1",
+  "timestamp": "2026-04-16T19:09:24",
+  "elapsed_seconds": 7.4,
+  "num_cases": 2,
+  "aggregate": {
+    "entity_precision": 0.75,
+    "entity_recall": 0.8611111111111112,
+    "entity_f1": 0.7976190476190477,
+    "relationship_precision": 0.9,
+    "relationship_recall": 0.7333333333333334,
+    "relationship_f1": 0.8
+  },
+  "cases": [
+    {
+      "golden_key": "einstein",
+      "entity_precision": 0.6666666666666666,
+      "entity_recall": 0.8888888888888888,
+      "entity_f1": 0.761904761904762,
+      "entity_matched": 8,
+      "entity_golden": 9,
+      "entity_predicted": 12,
+      "relationship_precision": 1.0,
+      "relationship_recall": 0.6666666666666666,
+      "relationship_f1": 0.8,
+      "relationship_matched": 4,
+      "relationship_golden": 6,
+      "relationship_predicted": 4
+    },
+    {
+      "golden_key": "hamilton",
+      "entity_precision": 0.8333333333333334,
+      "entity_recall": 0.8333333333333334,
+      "entity_f1": 0.8333333333333334,
+      "entity_matched": 5,
+      "entity_golden": 6,
+      "entity_predicted": 6,
+      "relationship_precision": 0.8,
+      "relationship_recall": 0.8,
+      "relationship_f1": 0.8000000000000002,
+      "relationship_matched": 4,
+      "relationship_golden": 5,
+      "relationship_predicted": 5
+    }
+  ]
+}

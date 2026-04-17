@@ -1,134 +1,267 @@
 ---
-version: 3
-description: "Single-pass extraction with entity type taxonomy, coreference resolution, 2 examples, negative constraints"
-model_target: gpt-4
-last_evaluated: 2026-04-16
-eval_score: 0.0
+version: 7
+description: "Single-pass extraction v7: better relationship examples showing product/tech extraction patterns, concise verb guidance"
+model_target: meta-llama/llama-4-scout
+last_evaluated: 2026-04-17
+eval_score_v7: 0.8312
 ---
 -Goal-
 Given a text document, identify all entities and the relationships among them, then return the result as structured JSON.
 
-You may extract up to {max_knowledge_triplets} entity-relationship pairs.
+Extract ALL entities and relationships present in the text, but prioritize accuracy over quantity. Extract only entities that play a clear role in the text's narrative — do not extract passing mentions, dates, or species lists.
 
 -Entity Types-
 Use ONLY the following entity type categories.  If an entity does not fit any category, use "Other":
 - Person:          Named individuals (real or fictional)
 - Organization:    Companies, institutions, agencies, teams, groups
-- Technology:      Programming languages, frameworks, tools, algorithms, standards
+- Technology:      Programming languages, frameworks, tools, algorithms, standards, ships, vehicles
 - Location:        Cities, countries, regions, buildings, landmarks
 - Event:          Conferences, wars, incidents, milestones, releases
 - Concept:        Theories, ideas, methods, disciplines, principles
-- Document:        Papers, books, reports, patents, specifications
-- Product:        Software, hardware, consumer goods, services
+- Document:        Papers, books, reports, patents, specifications, legislation
+- Product:        Software, hardware, consumer goods, services, facilities
 - Award:          Prizes, honors, certifications, rankings
 
 -Steps-
 1. Identify all entities in the text.  For each entity:
    - entity_name: Canonical, capitalized name.  Resolve pronouns ("she", "it", "they") and ambiguous references ("the company", "this method") to their full canonical name using prior context.
-   - entity_type: One of the types listed above.
+   - entity_type: One of the types listed above. When an entity could be multiple types, choose the one most central to its role in the text.
    - entity_description: A concise but comprehensive description of the entity's attributes and activities as described in the text.
 
-2. From the entities identified in step 1, identify all pairs of (source_entity, target_entity) that have a meaningful relationship.  For each pair:
+2. From the entities identified in step 1, identify ALL pairs of (source_entity, target_entity) that have a meaningful relationship. For each pair:
    - source_entity: Name exactly as listed in step 1.
    - target_entity: Name exactly as listed in step 1.
-   - relation: A specific, descriptive verb phrase (e.g. "developed", "acquired", "was CEO of").  Avoid vague relations like "is related to", "is associated with", or "involves".
+   - relation: A SHORT, SPECIFIC verb or verb phrase (1-4 words). Examples: "developed", "acquired", "was CEO of", "manufactures cells at". Avoid vague relations like "is related to", "is associated with", or "involves".
    - relationship_description: A brief explanation of why these entities are related, based on the text.
+
+   IMPORTANT: Check every entity pair systematically. Most entities in the text participate in at least one relationship. If an entity has no relationships, reconsider whether it is significant enough to include.
+
+   Relationship direction matters. Prefer ACTIVE voice: "X developed Y" not "Y was developed by X". Prefer the direction that reads naturally: "Tesla operates Gigafactory Nevada" not "Gigafactory Nevada is operated by Tesla".
 
 3. Output Formatting:
    - Return the result as valid JSON with two keys: "entities" (list of entity objects) and "relationships" (list of relationship objects).
    - Do NOT include any text, explanation, or markdown outside the JSON structure.
-   - If no entities or relationships are found, return: {{ "entities": [], "relationships": [] }}
+   - If no entities or relationships are found, return: { "entities": [], "relationships": [] }
 
 -Rules-
 - Extract only entities and relationships that are explicitly stated or directly inferable from the text.  Do NOT fabricate or speculate.
 - Merge duplicate entity references: if "Einstein" and "Albert Einstein" refer to the same entity, use "Albert Einstein" once.
+- Use the shortest canonical name for entities. Prefer "Broad Institute" over "Broad Institute of MIT and Harvard". Prefer "Linus Torvalds" over full formal names unless the full name appears in the text. Do NOT add qualifiers like "2020" to "Nobel Prize in Chemistry" when the text just says "Nobel Prize in Chemistry".
 - Prefer specific relations over generic ones: "invented" > "contributed to" > "is related to".
+- Keep relations SHORT: 1-4 words maximum. "co-developed" not "co-developed the CRISPR-Cas9 gene editing technology for". The description field carries the detail.
 - Do NOT extract trivially generic relationships (e.g. "Entity A exists" or "Entity B is a concept").
+- Do NOT extract bare years (e.g. "2008", "2016") or date mentions as Event entities. Only extract named events (e.g. "2008 Financial Crisis", "Apollo 11").
+- Do NOT extract species names, geographic features, or other nouns that are mentioned but do not participate in meaningful relationships.
+- Every entity you list MUST appear in at least one relationship, and every relationship MUST reference entities from your entity list.
 
--Example 1: Straightforward Extraction-
-Input excerpt: "Albert Einstein developed the theory of relativity and won the Nobel Prize in Physics in 1921."
+-Example 1: Technology and Products-
+Input excerpt: "Panasonic manufactures battery cells at Gigafactory Nevada, which produces batteries for the Tesla Model 3 and Tesla Model Y. Tesla assembles the Model 3 at its Fremont Factory. Mobileye formerly supplied chips for Autopilot."
 Output:
-{{
+{
   "entities": [
-    {{
-      "entity_name": "Albert Einstein",
-      "entity_type": "Person",
-      "entity_description": "Theoretical physicist who developed the theory of relativity and won the Nobel Prize in Physics in 1921."
-    }},
-    {{
-      "entity_name": "Theory of Relativity",
-      "entity_type": "Concept",
-      "entity_description": "A scientific theory describing the laws of physics in relation to observers in different frames of reference, developed by Albert Einstein."
-    }},
-    {{
-      "entity_name": "Nobel Prize in Physics",
-      "entity_type": "Award",
-      "entity_description": "A prestigious international award in physics, awarded annually by the Royal Swedish Academy of Sciences."
-    }}
+    {
+      "entity_name": "Panasonic",
+      "entity_type": "Organization",
+      "entity_description": "Company that manufactures battery cells at Gigafactory Nevada."
+    },
+    {
+      "entity_name": "Gigafactory Nevada",
+      "entity_type": "Product",
+      "entity_description": "Factory producing batteries for Tesla vehicles."
+    },
+    {
+      "entity_name": "Tesla Model 3",
+      "entity_type": "Product",
+      "entity_description": "Electric vehicle produced by Tesla, assembled at Fremont Factory."
+    },
+    {
+      "entity_name": "Tesla Model Y",
+      "entity_type": "Product",
+      "entity_description": "Electric vehicle produced by Tesla using batteries from Gigafactory Nevada."
+    },
+    {
+      "entity_name": "Fremont Factory",
+      "entity_type": "Product",
+      "entity_description": "Tesla factory where Model 3 is assembled."
+    },
+    {
+      "entity_name": "Mobileye",
+      "entity_type": "Organization",
+      "entity_description": "Company that formerly supplied chips for Autopilot."
+    },
+    {
+      "entity_name": "Autopilot",
+      "entity_type": "Technology",
+      "entity_description": "Tesla's autonomous driving system, formerly using chips from Mobileye."
+    }
   ],
   "relationships": [
-    {{
-      "source_entity": "Albert Einstein",
-      "target_entity": "Theory of Relativity",
-      "relation": "developed",
-      "relationship_description": "Albert Einstein is the developer of the theory of relativity."
-    }},
-    {{
-      "source_entity": "Albert Einstein",
-      "target_entity": "Nobel Prize in Physics",
-      "relation": "won",
-      "relationship_description": "Albert Einstein won the Nobel Prize in Physics in 1921."
-    }}
+    {
+      "source_entity": "Panasonic",
+      "target_entity": "Gigafactory Nevada",
+      "relation": "manufactures cells at",
+      "relationship_description": "Panasonic manufactures battery cells at Gigafactory Nevada."
+    },
+    {
+      "source_entity": "Gigafactory Nevada",
+      "target_entity": "Tesla Model 3",
+      "relation": "produces batteries for",
+      "relationship_description": "Gigafactory Nevada produces batteries for the Tesla Model 3."
+    },
+    {
+      "source_entity": "Gigafactory Nevada",
+      "target_entity": "Tesla Model Y",
+      "relation": "produces batteries for",
+      "relationship_description": "Gigafactory Nevada produces batteries for the Tesla Model Y."
+    },
+    {
+      "source_entity": "Fremont Factory",
+      "target_entity": "Tesla Model 3",
+      "relation": "assembles",
+      "relationship_description": "Fremont Factory assembles the Tesla Model 3."
+    },
+    {
+      "source_entity": "Mobileye",
+      "target_entity": "Autopilot",
+      "relation": "formerly supplied chips for",
+      "relationship_description": "Mobileye formerly supplied chips for Tesla's Autopilot system."
+    }
   ]
-}}
+}
 
--Example 2: Coreference Resolution-
+-Example 2: People and Research-
+Input excerpt: "Jennifer Doudna and Emmanuelle Charpentier co-developed CRISPR-Cas9 at UC Berkeley. Feng Zhang led research at the Broad Institute and co-founded Editas Medicine, while CRISPR Therapeutics focuses on therapeutic applications."
+Output:
+{
+  "entities": [
+    {
+      "entity_name": "Jennifer Doudna",
+      "entity_type": "Person",
+      "entity_description": "Biochemist who co-developed CRISPR-Cas9 gene editing technology."
+    },
+    {
+      "entity_name": "Emmanuelle Charpentier",
+      "entity_type": "Person",
+      "entity_description": "Biochemist who co-developed CRISPR-Cas9 gene editing technology."
+    },
+    {
+      "entity_name": "CRISPR-Cas9",
+      "entity_type": "Technology",
+      "entity_description": "Gene editing technology co-developed by Doudna and Charpentier."
+    },
+    {
+      "entity_name": "UC Berkeley",
+      "entity_type": "Organization",
+      "entity_description": "University where Doudna conducted CRISPR-Cas9 research."
+    },
+    {
+      "entity_name": "Feng Zhang",
+      "entity_type": "Person",
+      "entity_description": "Researcher who led CRISPR research at Broad Institute and co-founded Editas Medicine."
+    },
+    {
+      "entity_name": "Broad Institute",
+      "entity_type": "Organization",
+      "entity_description": "Research institution where Feng Zhang led CRISPR research."
+    },
+    {
+      "entity_name": "Editas Medicine",
+      "entity_type": "Organization",
+      "entity_description": "Biotechnology company co-founded by Feng Zhang."
+    },
+    {
+      "entity_name": "CRISPR Therapeutics",
+      "entity_type": "Organization",
+      "entity_description": "Company focusing on therapeutic applications of CRISPR."
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity": "Jennifer Doudna",
+      "target_entity": "CRISPR-Cas9",
+      "relation": "co-developed",
+      "relationship_description": "Jennifer Doudna co-developed CRISPR-Cas9 gene editing technology."
+    },
+    {
+      "source_entity": "Emmanuelle Charpentier",
+      "target_entity": "CRISPR-Cas9",
+      "relation": "co-developed",
+      "relationship_description": "Emmanuelle Charpentier co-developed CRISPR-Cas9 gene editing technology."
+    },
+    {
+      "source_entity": "Jennifer Doudna",
+      "target_entity": "UC Berkeley",
+      "relation": "conducted research at",
+      "relationship_description": "Jennifer Doudna conducted research at UC Berkeley."
+    },
+    {
+      "source_entity": "Feng Zhang",
+      "target_entity": "Broad Institute",
+      "relation": "led research at",
+      "relationship_description": "Feng Zhang led research at the Broad Institute."
+    },
+    {
+      "source_entity": "Feng Zhang",
+      "target_entity": "Editas Medicine",
+      "relation": "co-founded",
+      "relationship_description": "Feng Zhang co-founded Editas Medicine."
+    },
+    {
+      "source_entity": "CRISPR Therapeutics",
+      "target_entity": "CRISPR-Cas9",
+      "relation": "develops therapies using",
+      "relationship_description": "CRISPR Therapeutics focuses on therapeutic applications of CRISPR-Cas9."
+    }
+  ]
+}
+
+-Example 3: Coreference and Events-
 Input excerpt: "Margaret Hamilton led the software engineering division at MIT Draper Laboratory.  She and her team developed the onboard flight software for the Apollo program.  The software was notable for its error-handling priorities, which NASA credited with saving the Apollo 11 mission."
 Output:
-{{
+{
   "entities": [
-    {{
+    {
       "entity_name": "Margaret Hamilton",
       "entity_type": "Person",
       "entity_description": "Software engineer who led the software engineering division at MIT Draper Laboratory and developed onboard flight software for the Apollo program."
-    }},
-    {{
+    },
+    {
       "entity_name": "MIT Draper Laboratory",
       "entity_type": "Organization",
       "entity_description": "The laboratory where Margaret Hamilton led the software engineering division."
-    }},
-    {{
+    },
+    {
+      "entity_name": "Software Engineering",
+      "entity_type": "Concept",
+      "entity_description": "The discipline that Margaret Hamilton led and coined the term for."
+    },
+    {
       "entity_name": "Apollo 11",
       "entity_type": "Event",
       "entity_description": "The NASA mission whose software, developed by Margaret Hamilton's team, was credited with saving the mission through its error-handling priorities."
-    }},
-    {{
-      "entity_name": "Apollo Program",
-      "entity_type": "Event",
-      "entity_description": "NASA's human spaceflight program for which Margaret Hamilton and her team developed onboard flight software."
-    }}
+    }
   ],
   "relationships": [
-    {{
+    {
       "source_entity": "Margaret Hamilton",
       "target_entity": "MIT Draper Laboratory",
       "relation": "led division at",
       "relationship_description": "Margaret Hamilton led the software engineering division at MIT Draper Laboratory."
-    }},
-    {{
+    },
+    {
       "source_entity": "Margaret Hamilton",
-      "target_entity": "Apollo Program",
+      "target_entity": "Software Engineering",
+      "relation": "coined term",
+      "relationship_description": "Margaret Hamilton coined the term 'software engineering'."
+    },
+    {
+      "source_entity": "Margaret Hamilton",
+      "target_entity": "Apollo 11",
       "relation": "developed software for",
-      "relationship_description": "Margaret Hamilton and her team developed the onboard flight software for the Apollo program."
-    }},
-    {{
-      "source_entity": "Apollo 11",
-      "target_entity": "Apollo Program",
-      "relation": "was part of",
-      "relationship_description": "Apollo 11 was a mission within the Apollo program."
-    }}
+      "relationship_description": "Margaret Hamilton and her team developed the onboard flight software for Apollo 11."
+    }
   ]
-}}
+}
 
 -Real Data-
 ######################

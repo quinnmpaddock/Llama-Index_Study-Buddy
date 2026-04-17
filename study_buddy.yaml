@@ -83,7 +83,7 @@ server:
 # Settings for GraphRAG knowledge graph construction.
 graphrag:
   # Maximum number of relationship paths extracted per chunk
-  max_paths_per_chunk: 2
+  max_paths_per_chunk: 15
   # Prompt template file (relative to src/prompts/)
   extraction_prompt: "kg_extract_template.txt"
 

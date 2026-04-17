@@ -1,0 +1,99 @@
+{
+  "text": "The Rust programming language was created by Graydon Hoare at Mozilla Research as a personal project in 2006. After years of development, Mozilla officially sponsored Rust in 2009, and version 1.0 was released in 2015. The language's borrow checker enforces ownership rules at compile time, eliminating data races without a garbage collector. Rust was adopted by Linux Torvalds into the Linux kernel in 2022, making it the second language after C approved for kernel development. Amazon Web Services uses Rust in its Firecracker virtualization layer, and Microsoft is rewriting critical Windows components in Rust to address memory safety vulnerabilities. The Rust Foundation, established in 2021 with backing from Google, Microsoft, AWS, and Huawei, now governs the language's development.",
+  "entities": [
+    {
+      "entity_name": "Rust",
+      "entity_type": "Technology",
+      "entity_description": "A systems programming language created by Graydon Hoare that enforces memory safety through its borrow checker."
+    },
+    {
+      "entity_name": "Graydon Hoare",
+      "entity_type": "Person",
+      "entity_description": "Creator of the Rust programming language, originally as a personal project in 2006."
+    },
+    {
+      "entity_name": "Mozilla Research",
+      "entity_type": "Organization",
+      "entity_description": "Research division of Mozilla that officially sponsored Rust development starting in 2009."
+    },
+    {
+      "entity_name": "Borrow Checker",
+      "entity_type": "Concept",
+      "entity_description": "Rust's compile-time mechanism that enforces ownership rules to eliminate data races without garbage collection."
+    },
+    {
+      "entity_name": "Linux Kernel",
+      "entity_type": "Technology",
+      "entity_description": "The core of the Linux operating system, which accepted Rust as a second language for development in 2022."
+    },
+    {
+      "entity_name": "Linus Torvalds",
+      "entity_type": "Person",
+      "entity_description": "Creator and maintainer of the Linux kernel who approved Rust for kernel development."
+    },
+    {
+      "entity_name": "Amazon Web Services",
+      "entity_type": "Organization",
+      "entity_description": "Cloud computing platform that uses Rust in its Firecracker virtualization layer."
+    },
+    {
+      "entity_name": "Firecracker",
+      "entity_type": "Technology",
+      "entity_description": "AWS's lightweight virtualization technology written in Rust."
+    },
+    {
+      "entity_name": "Microsoft",
+      "entity_type": "Organization",
+      "entity_description": "Technology company rewriting critical Windows components in Rust for memory safety."
+    },
+    {
+      "entity_name": "Rust Foundation",
+      "entity_type": "Organization",
+      "entity_description": "Organization governing Rust's development, established in 2021 with backing from Google, Microsoft, AWS, and Huawei."
+    }
+  ],
+  "relationships": [
+    {
+      "source_entity": "Graydon Hoare",
+      "target_entity": "Rust",
+      "relation": "created",
+      "relationship_description": "Graydon Hoare created Rust as a personal project in 2006."
+    },
+    {
+      "source_entity": "Mozilla Research",
+      "target_entity": "Rust",
+      "relation": "sponsored",
+      "relationship_description": "Mozilla Research officially sponsored Rust development starting in 2009."
+    },
+    {
+      "source_entity": "Borrow Checker",
+      "target_entity": "Rust",
+      "relation": "enforces safety in",
+      "relationship_description": "Rust's borrow checker enforces ownership rules at compile time, eliminating data races."
+    },
+    {
+      "source_entity": "Linus Torvalds",
+      "target_entity": "Linux Kernel",
+      "relation": "maintains",
+      "relationship_description": "Linus Torvalds maintains the Linux kernel and approved Rust for kernel development."
+    },
+    {
+      "source_entity": "Amazon Web Services",
+      "target_entity": "Firecracker",
+      "relation": "developed",
+      "relationship_description": "AWS developed Firecracker, a Rust-based virtualization layer."
+    },
+    {
+      "source_entity": "Microsoft",
+      "target_entity": "Rust",
+      "relation": "adopted",
+      "relationship_description": "Microsoft is rewriting critical Windows components in Rust to address memory safety vulnerabilities."
+    },
+    {
+      "source_entity": "Rust Foundation",
+      "target_entity": "Rust",
+      "relation": "governs",
+      "relationship_description": "The Rust Foundation governs the language's development."
+    }
+  ]
+}

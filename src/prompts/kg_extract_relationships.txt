@@ -1,5 +1,5 @@
 ---
-version: 1
+version: 2
 description: "Pass 2 relationship extraction given pre-extracted entity list"
 model_target: gpt-4
 last_evaluated: 2026-04-16
@@ -33,7 +33,7 @@ Your task is to identify relationships between pairs of entities from the provid
 3. Output Formatting:
    - Return the result as valid JSON with a single key: "relationships" (list of relationship objects).
    - Do NOT include any text, explanation, or markdown outside the JSON structure.
-   - If no relationships are found, return: {{ "relationships": [] }}
+   - If no relationships are found, return: { "relationships": [] }
 
 -Example-
 Entities:
@@ -44,22 +44,22 @@ Entities:
 Input excerpt: "Margaret Hamilton led the software engineering division at MIT Draper Laboratory.  She and her team developed the onboard flight software for the Apollo program."
 
 Output:
-{{
+{
   "relationships": [
-    {{
+    {
       "source_entity": "Margaret Hamilton",
       "target_entity": "MIT Draper Laboratory",
       "relation": "led division at",
       "relationship_description": "Margaret Hamilton led the software engineering division at MIT Draper Laboratory."
-    }},
-    {{
+    },
+    {
       "source_entity": "Margaret Hamilton",
       "target_entity": "Apollo Program",
       "relation": "developed software for",
       "relationship_description": "Margaret Hamilton and her team developed the onboard flight software for the Apollo program."
-    }}
+    }
   ]
-}}
+}
 
 -Real Data-
 ######################
